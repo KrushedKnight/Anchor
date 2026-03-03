@@ -1,14 +1,9 @@
-//
-//  AnchorApp.swift
-//  Anchor
-//
-//  Created by Krishiv Manyam on 3/2/26.
-//
-
 import SwiftUI
 
 @main
 struct AnchorApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
