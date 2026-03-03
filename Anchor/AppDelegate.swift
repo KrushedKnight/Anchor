@@ -4,13 +4,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let appObserver = ActiveAppObserver()
     let idleMonitor = IdleMonitor()
     let chromeMonitor = ChromeURLMonitor()
-    let server = LocalServer()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appObserver.start()
         idleMonitor.start()
         chromeMonitor.start()
-        server.start()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -24,6 +22,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appObserver.stop()
         idleMonitor.stop()
         chromeMonitor.stop()
-        server.stop()
     }
 }
