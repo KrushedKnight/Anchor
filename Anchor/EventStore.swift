@@ -5,7 +5,7 @@ import Observation
 final class EventStore {
     static let shared = EventStore()
 
-    private var events: [AnchorEvent] = []
+    var log: [AnchorEvent] = []
     private var nextId: Int64 = 0
     private let maxEvents = 10_000
 
@@ -19,15 +19,13 @@ final class EventStore {
             data: data
         )
         nextId += 1
-        events.append(event)
-        if events.count > maxEvents {
-            events.removeFirst(events.count - maxEvents)
+        log.append(event)
+        if log.count > maxEvents {
+            log.removeFirst(log.count - maxEvents)
         }
     }
 
-    func events(after id: Int64) -> [AnchorEvent] {
-        events.filter { $0.id > id }
+    func slice(after id: Int64) -> [AnchorEvent] {
+        log.filter { $0.id > id }
     }
-
-    func allEvents() -> [AnchorEvent] { events }
 }

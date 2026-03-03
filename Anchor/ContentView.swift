@@ -5,14 +5,14 @@ struct ContentView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            List(store.events) { event in
+            List(store.log) { event in
                 EventRow(event: event)
                     .id(event.id)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
             }
-            .onChange(of: store.events.count) {
-                if let last = store.events.last {
+            .onChange(of: store.log.count) {
+                if let last = store.log.last {
                     proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
