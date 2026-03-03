@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 final class IdleMonitor {
-    var threshold: TimeInterval = 30
+    var threshold: TimeInterval = 5
     private var timer: Timer?
     private var isIdle = false
     private var idleStartTime: Date?

@@ -8,5 +8,6 @@ struct AnchorApp: App {
         WindowGroup {
             ContentView()
         }
+        .defaultLaunchBehavior(.presented)
     }
 }
