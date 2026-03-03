@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appObserver.start()
         idleMonitor.start()
         chromeMonitor.start()
+        DriftEngine.shared.start()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -22,5 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appObserver.stop()
         idleMonitor.stop()
         chromeMonitor.stop()
+        DriftEngine.shared.stop()
     }
 }
