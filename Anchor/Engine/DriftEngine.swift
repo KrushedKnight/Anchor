@@ -7,18 +7,24 @@ final class DriftEngine {
     private(set) var state = EngineState()
     var config = RuleConfig.defaults
 
-    private var lastSeenId:          Int64  = -1
-    private var timer:               Timer?
+    private var lastSeenId:            Int64  = -1
+    private var timer:                 Timer?
 
     // switch-rate tracking
-    private var switchTimestamps:    [Date] = []
+    private var switchTimestamps:      [Date] = []
 
     // dwell tracking
-    private var contextStartTime:    Date   = .now
-    private var offTaskAccumulator:  TimeInterval = 0
-    private var highSwitchRateStart: Date?
+    private var contextStartTime:      Date   = .now
+    private var offTaskAccumulator:    TimeInterval = 0
+    private var highSwitchRateStart:   Date?
 
-    private init() {}
+    // decision publishing
+    private let bus:                   DecisionBus?
+    private var lastPublishedRiskLevel: RiskLevel?
+
+    init(bus: DecisionBus? = nil) {
+        self.bus = bus
+    }
 
     func start() {
         timer = Timer.scheduledTimer(withTimeInterval: config.evaluationInterval, repeats: true) { [weak self] _ in
@@ -35,8 +41,9 @@ final class DriftEngine {
         let newEvents = EventStore.shared.slice(after: lastSeenId)
         if let last = newEvents.last { lastSeenId = last.id }
         process(newEvents)
-        state.riskLevel         = evaluate()
-        state.lastEvaluatedAt   = .now
+        state.riskLevel       = evaluate()
+        state.lastEvaluatedAt = .now
+        maybePublish()
     }
 
     private func process(_ events: [AnchorEvent]) {
@@ -117,5 +124,67 @@ final class DriftEngine {
         }
 
         return level
+    }
+
+    private func maybePublish() {
+        guard let bus else { return }
+        guard state.riskLevel != lastPublishedRiskLevel else { return }
+        lastPublishedRiskLevel = state.riskLevel
+
+        let severity: EngineDecision.Severity = switch state.riskLevel {
+            case .stable: .low
+            case .atRisk: .medium
+            case .drift:  .high
+        }
+
+        let riskState: EngineDecision.RiskState = switch state.riskLevel {
+            case .stable: .stable
+            case .atRisk: .atRisk
+            case .drift:  .drift
+        }
+
+        let reason: EngineDecision.Reason = switch state.riskLevel {
+            case .stable: .unknown
+            case .atRisk: state.isIdle ? .idle : .highSwitching
+            case .drift:  .offContextDwell
+        }
+
+        let ctx: EngineDecision.ContextSnapshot? = {
+            if !state.currentDomain.isEmpty {
+                return .init(key: "domain:\(state.currentDomain)", label: state.currentDomain)
+            } else if !state.currentApp.isEmpty {
+                return .init(key: "app:\(state.currentApp)", label: state.currentApp)
+            }
+            return nil
+        }()
+
+        let metrics = EngineDecision.MetricsSnapshot(
+            switchesPerMin:             state.switchesPerMinute,
+            offContextSeconds:          state.totalOffTaskDwell,
+            idleSeconds:                0,
+            currentContextDwellSeconds: state.dwellInCurrentContext
+        )
+
+        let decisionType: EngineDecision.DecisionType = switch state.riskLevel {
+            case .stable: .none
+            case .atRisk: .nudge
+            case .drift:  .escalate
+        }
+
+        let decision = EngineDecision(
+            id:          0,
+            ts:          0,
+            type:        decisionType,
+            severity:    severity,
+            reason:      reason,
+            riskState:   riskState,
+            task:        nil,
+            context:     ctx,
+            metrics:     metrics,
+            actions:     [.return, .snooze5m, .dismiss],
+            channelHint: severity == .high ? .overlay : .notification
+        )
+
+        bus.publish(decision)
     }
 }
