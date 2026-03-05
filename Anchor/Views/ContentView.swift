@@ -1,137 +1,162 @@
 import SwiftUI
 
 struct ContentView: View {
-    var store  = EventStore.shared
-    var engine = DriftEngine.shared
+    var sessionManager = SessionManager.shared
 
     var body: some View {
-        VStack(spacing: 0) {
-            RiskBanner(state: engine.state)
-            Divider()
-            ScrollViewReader { proxy in
-                List(store.log) { event in
-                    EventRow(event: event)
-                        .id(event.id)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
-                }
-                .scrollContentBackground(.hidden)
-                .onChange(of: store.log.count) {
-                    if let last = store.log.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
-                }
+        Group {
+            if sessionManager.isActive {
+                SessionActiveView()
+            } else {
+                SessionStartView()
             }
         }
-        .frame(minWidth: 400, minHeight: 120)
         .background(VisualEffect().ignoresSafeArea())
     }
 }
 
-struct RiskBanner: View {
-    let state: EngineState
+struct SessionStartView: View {
+    @State private var taskTitle:  String                  = ""
+    @State private var strictness: FocusSession.Strictness = .normal
 
     var body: some View {
-        HStack(spacing: 16) {
-            Circle()
-                .fill(riskColor)
-                .frame(width: 10, height: 10)
-            Text(riskLabel)
-                .font(.system(.caption, design: .monospaced).bold())
-                .foregroundStyle(riskColor)
-            Spacer()
-            if !state.currentApp.isEmpty {
-                Text(state.currentApp)
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Anchor")
+                    .font(.system(.title2, design: .monospaced).weight(.heavy))
+                Text("Focus tracker")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
-            if !state.currentDomain.isEmpty {
-                Text(state.currentDomain)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("What are you working on?")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
+                TextField("e.g. Build the login flow", text: $taskTitle)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .padding(10)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(8)
+                    .onSubmit { tryStart() }
             }
-            Text("dwell \(Int(state.dwellInCurrentContext))s")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tertiary)
-            Text("\(String(format: "%.1f", state.switchesPerMinute)) sw/min")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tertiary)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Strictness")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    ForEach(FocusSession.Strictness.allCases, id: \.self) { level in
+                        Button(level.rawValue) { strictness = level }
+                            .buttonStyle(PickerButtonStyle(isSelected: strictness == level))
+                    }
+                }
+            }
+
+            Button("Start Session") { tryStart() }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(riskColor.opacity(0.08))
+        .padding(28)
+        .frame(width: 320)
     }
 
-    private var riskColor: Color {
-        switch state.riskLevel {
-        case .stable: return .green
-        case .atRisk: return .yellow
-        case .drift:  return .red
-        }
-    }
-
-    private var riskLabel: String {
-        switch state.riskLevel {
-        case .stable: return "STABLE"
-        case .atRisk: return "AT RISK"
-        case .drift:  return "DRIFT"
-        }
+    private func tryStart() {
+        guard !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        SessionManager.shared.start(taskTitle: taskTitle, strictness: strictness)
     }
 }
 
-struct EventRow: View {
-    let event: AnchorEvent
+struct SessionActiveView: View {
+    var sessionManager = SessionManager.shared
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(formattedTime(event.ts))
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Anchor")
+                    .font(.system(.title2, design: .monospaced).weight(.heavy))
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 7, height: 7)
+                    Text("Session active")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let session = sessionManager.activeSession {
+                VStack(alignment: .leading, spacing: 10) {
+                    SessionRow(label: "Task",       value: session.taskTitle.isEmpty ? "—" : session.taskTitle)
+                    SessionRow(label: "Strictness", value: session.strictness.rawValue)
+                    SessionRow(label: "Started",    value: session.startedAt.formatted(date: .omitted, time: .shortened))
+                }
+            }
+
+            Button("End Session") { SessionManager.shared.end() }
+                .buttonStyle(DestructiveButtonStyle())
+        }
+        .padding(28)
+        .frame(width: 320)
+    }
+}
+
+private struct SessionRow: View {
+    var label: String
+    var value: String
+
+    var body: some View {
+        HStack(alignment: .top) {
+            Text(label)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 80, alignment: .leading)
-
-            Text(event.type)
+                .frame(width: 72, alignment: .leading)
+            Text(value)
                 .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(typeColor)
-                .frame(width: 110, alignment: .leading)
-
-            Text(dataString)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer()
         }
-    }
-
-    private var dataString: String {
-        event.data
-            .sorted(by: { $0.key < $1.key })
-            .map { "\($0.key)=\($0.value)" }
-            .joined(separator: "  ")
-    }
-
-    private var typeColor: Color {
-        switch event.type {
-        case "active_app":     return .blue
-        case "browser_domain": return .green
-        case "idle_start":     return .orange
-        case "idle_end":       return .purple
-        default:               return .primary
-        }
-    }
-
-    private func formattedTime(_ ts: Double) -> String {
-        let date = Date(timeIntervalSince1970: ts)
-        return timeFormatter.string(from: date)
     }
 }
 
-private let timeFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "HH:mm:ss.SSS"
-    return f
-}()
+private struct PickerButtonStyle: ButtonStyle {
+    var isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.caption, design: .monospaced))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.accentColor : Color.primary.opacity(0.07))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .cornerRadius(6)
+    }
+}
+
+private struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .monospaced).weight(.medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.accentColor.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.3))
+            .foregroundStyle(.white)
+            .cornerRadius(8)
+    }
+}
+
+private struct DestructiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .monospaced).weight(.medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.red.opacity(configuration.isPressed ? 0.65 : 0.8))
+            .foregroundStyle(.white)
+            .cornerRadius(8)
+    }
+}
 
 private struct VisualEffect: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {

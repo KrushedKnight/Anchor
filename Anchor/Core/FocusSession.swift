@@ -1,0 +1,13 @@
+import Foundation
+
+struct FocusSession {
+    enum Strictness: String, CaseIterable {
+        case normal = "Normal"
+        case strict = "Strict"
+    }
+
+    var id:         UUID       = UUID()
+    var startedAt:  Date       = .now
+    var taskTitle:  String
+    var strictness: Strictness
+}

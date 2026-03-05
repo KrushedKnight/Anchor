@@ -1,13 +1,23 @@
 import SwiftUI
 
 struct WidgetView: View {
-    var engine = DriftEngine.shared
+    var engine         = DriftEngine.shared
+    var sessionManager = SessionManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Anchor")
-                .font(.system(.caption, design: .monospaced).weight(.heavy))
-                .foregroundStyle(.primary)
+            HStack(spacing: 0) {
+                Text("Anchor")
+                    .font(.system(.caption, design: .monospaced).weight(.heavy))
+                    .foregroundStyle(.primary)
+                if let title = sessionManager.activeSession?.taskTitle, !title.isEmpty {
+                    Text(" · \(title)")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
 
             HStack(spacing: 14) {
                 HStack(spacing: 6) {

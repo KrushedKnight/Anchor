@@ -10,5 +10,6 @@ struct AnchorApp: App {
         }
         .defaultLaunchBehavior(.presented)
         .windowLevel(.floating)
+        .windowResizability(.contentSize)
     }
 }

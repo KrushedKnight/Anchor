@@ -58,8 +58,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ))
         }
 
-        panel.orderFront(nil)
         widgetPanel = panel
+        updateWidgetVisibility()
+        observeSessionState()
+    }
+
+    private func observeSessionState() {
+        withObservationTracking {
+            _ = SessionManager.shared.isActive
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.updateWidgetVisibility()
+                self?.observeSessionState()
+            }
+        }
+    }
+
+    private func updateWidgetVisibility() {
+        if SessionManager.shared.isActive {
+            widgetPanel?.orderFront(nil)
+        } else {
+            widgetPanel?.orderOut(nil)
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
