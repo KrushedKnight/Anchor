@@ -11,4 +11,7 @@ struct EngineState {
     var recoveryProgress:        Double           = 0
     var lastInterventionTime:    Date?            = nil
     var lastEvaluatedAt:         Date             = .distantPast
+    var sessionActive:           Bool             = false
+    var sessionTaskTitle:        String           = ""
+    var isOffTaskContext:        Bool             = false
 }

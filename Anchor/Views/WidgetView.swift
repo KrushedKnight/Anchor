@@ -29,6 +29,13 @@ struct WidgetView: View {
                         .foregroundStyle(riskColor)
                 }
 
+                if engine.state.sessionActive && engine.state.isOffTaskContext {
+                    Divider().frame(height: 12)
+                    Text("OFF TASK")
+                        .font(.system(.caption2, design: .monospaced).bold())
+                        .foregroundStyle(.orange)
+                }
+
                 Divider().frame(height: 12)
 
                 Text("dwell \(Int(engine.state.dwellInCurrentContext))s")

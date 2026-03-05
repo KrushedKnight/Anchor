@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     var sessionManager = SessionManager.shared
@@ -16,8 +17,11 @@ struct ContentView: View {
 }
 
 struct SessionStartView: View {
-    @State private var taskTitle:  String                  = ""
-    @State private var strictness: FocusSession.Strictness = .normal
+    @State private var taskTitle:   String                  = ""
+    @State private var strictness:  FocusSession.Strictness = .normal
+    @State private var allowedApps: Set<String>             = []
+    @State private var blockedApps: Set<String>             = []
+    @State private var runningApps: [String]                = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -54,22 +58,53 @@ struct SessionStartView: View {
                 }
             }
 
+            AppPickerSection(
+                title:       "Blocked Apps",
+                apps:        runningApps,
+                selected:    $blockedApps,
+                conflicting: $allowedApps
+            )
+
+            AppPickerSection(
+                title:       "Allowed Apps",
+                apps:        runningApps,
+                selected:    $allowedApps,
+                conflicting: $blockedApps
+            )
+
             Button("Start Session") { tryStart() }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(28)
         .frame(width: 320)
+        .onAppear { refreshApps() }
+    }
+
+    private func refreshApps() {
+        runningApps = NSWorkspace.shared.runningApplications
+            .filter {
+                $0.activationPolicy == .regular &&
+                $0.bundleIdentifier != Bundle.main.bundleIdentifier
+            }
+            .compactMap { $0.localizedName }
+            .sorted()
     }
 
     private func tryStart() {
         guard !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        SessionManager.shared.start(taskTitle: taskTitle, strictness: strictness)
+        SessionManager.shared.start(
+            taskTitle:   taskTitle,
+            strictness:  strictness,
+            allowedApps: allowedApps,
+            blockedApps: blockedApps
+        )
     }
 }
 
 struct SessionActiveView: View {
     var sessionManager = SessionManager.shared
+    var engine         = DriftEngine.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -91,6 +126,18 @@ struct SessionActiveView: View {
                     SessionRow(label: "Task",       value: session.taskTitle.isEmpty ? "—" : session.taskTitle)
                     SessionRow(label: "Strictness", value: session.strictness.rawValue)
                     SessionRow(label: "Started",    value: session.startedAt.formatted(date: .omitted, time: .shortened))
+                    SessionRow(
+                        label:      "Context",
+                        value:      engine.state.isOffTaskContext ? "OFF TASK" : "ON TASK",
+                        valueColor: engine.state.isOffTaskContext ? .orange : .green
+                    )
+
+                    if !session.blockedApps.isEmpty {
+                        SessionRow(label: "Blocked", value: session.blockedApps.sorted().joined(separator: ", "))
+                    }
+                    if !session.allowedApps.isEmpty {
+                        SessionRow(label: "Allowed", value: session.allowedApps.sorted().joined(separator: ", "))
+                    }
                 }
             }
 
@@ -102,9 +149,130 @@ struct SessionActiveView: View {
     }
 }
 
+private struct AppPickerSection: View {
+    var title:       String
+    var apps:        [String]
+    @Binding var selected:    Set<String>
+    @Binding var conflicting: Set<String>
+    @State private var showPopover = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    showPopover = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                        Text(selected.isEmpty ? "Add" : "\(selected.count) selected")
+                    }
+                    .font(.system(.caption2, design: .monospaced))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .popover(isPresented: $showPopover, arrowEdge: .trailing) {
+                    AppListPopover(apps: apps, selected: $selected, conflicting: $conflicting)
+                }
+            }
+
+            if !selected.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(selected.sorted(), id: \.self) { app in
+                            HStack(spacing: 3) {
+                                Text(app)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .lineLimit(1)
+                                Button {
+                                    selected.remove(app)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 8, weight: .semibold))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.primary.opacity(0.07))
+                            .cornerRadius(4)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct AppListPopover: View {
+    var apps:        [String]
+    @Binding var selected:    Set<String>
+    @Binding var conflicting: Set<String>
+    @State private var search = ""
+
+    private var filtered: [String] {
+        search.isEmpty ? apps : apps.filter { $0.localizedCaseInsensitiveContains(search) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search", text: $search)
+                .textFieldStyle(.plain)
+                .font(.system(.caption, design: .monospaced))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    if filtered.isEmpty {
+                        Text("No apps found")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .padding(16)
+                    } else {
+                        ForEach(filtered, id: \.self) { app in
+                            HStack(spacing: 8) {
+                                Image(systemName: selected.contains(app) ? "checkmark.square.fill" : "square")
+                                    .font(.caption)
+                                    .foregroundStyle(selected.contains(app) ? Color.accentColor : Color.secondary)
+                                Text(app)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .onTapGesture { toggle(app) }
+                        }
+                    }
+                }
+            }
+            .frame(height: 240)
+        }
+        .frame(width: 220)
+    }
+
+    private func toggle(_ app: String) {
+        if selected.contains(app) {
+            selected.remove(app)
+        } else {
+            selected.insert(app)
+            conflicting.remove(app)
+        }
+    }
+}
+
 private struct SessionRow: View {
-    var label: String
-    var value: String
+    var label:      String
+    var value:      String
+    var valueColor: Color = .primary
 
     var body: some View {
         HStack(alignment: .top) {
@@ -114,6 +282,7 @@ private struct SessionRow: View {
                 .frame(width: 72, alignment: .leading)
             Text(value)
                 .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(valueColor)
         }
     }
 }

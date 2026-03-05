@@ -39,11 +39,38 @@ final class DriftEngine {
         let newEvents = EventStore.shared.slice(after: lastSeenId)
         if let last = newEvents.last { lastSeenId = last.id }
         process(newEvents)
+        classifyOffTask()
         state.riskLevel         = evaluate()
         state.totalOffTaskDwell = liveOffTaskDwell
         state.lastEvaluatedAt   = .now
-        print("[DriftEngine] tick → riskLevel=\(state.riskLevel), domain=\(state.currentDomain), dwell=\(Int(state.dwellInCurrentContext))s offTask=\(Int(liveOffTaskDwell))s")
+        print("[DriftEngine] tick → riskLevel=\(state.riskLevel), offTask=\(state.isOffTaskContext), app=\(state.currentApp), domain=\(state.currentDomain)")
         maybePublish()
+    }
+
+    private func classifyOffTask() {
+        guard let session = SessionManager.shared.activeSession else {
+            state.sessionActive    = false
+            state.sessionTaskTitle = ""
+            state.isOffTaskContext = false
+            return
+        }
+
+        state.sessionActive    = true
+        state.sessionTaskTitle = session.taskTitle
+
+        let app = state.currentApp
+
+        if session.blockedApps.contains(app) {
+            state.isOffTaskContext = true
+            return
+        }
+
+        switch session.strictness {
+        case .normal:
+            state.isOffTaskContext = false
+        case .strict:
+            state.isOffTaskContext = !session.allowedApps.isEmpty && !session.allowedApps.contains(app)
+        }
     }
 
     private func process(_ events: [AnchorEvent]) {
