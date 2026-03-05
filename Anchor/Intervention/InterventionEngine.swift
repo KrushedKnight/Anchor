@@ -85,13 +85,16 @@ final class InterventionEngine {
     private func buildBody(from decision: EngineDecision) -> String {
         var parts: [String] = []
 
-        if let context = decision.context {
-            parts.append("Context: \(context.label ?? context.key)")
+        if let task = decision.task, !task.name.isEmpty {
+            parts.append("Task: \(task.name)")
         }
 
-        if let metrics = decision.metrics {
+        if let context = decision.context, let label = context.label, !label.isEmpty {
+            parts.append(label)
+        }
+
+        if let metrics = decision.metrics, metrics.offContextSeconds > 0 {
             parts.append("\(Int(metrics.offContextSeconds))s off-task")
-            parts.append(String(format: "%.1f sw/min", metrics.switchesPerMin))
         }
 
         return parts.joined(separator: " · ")

@@ -19,6 +19,7 @@ final class DriftEngine {
 
     private let bus:                   DecisionBus?
     private var lastPublishedRiskLevel: RiskLevel?
+    private var lastSessionId:          UUID?
 
     init(bus: DecisionBus? = nil) {
         self.bus = bus
@@ -48,6 +49,14 @@ final class DriftEngine {
     }
 
     private func classifyOffTask() {
+        let currentSessionId = SessionManager.shared.activeSession?.id
+        if currentSessionId != lastSessionId {
+            offTaskAccumulator     = 0
+            recoveryStart          = nil
+            state.recoveryProgress = 0
+            lastSessionId          = currentSessionId
+        }
+
         guard let session = SessionManager.shared.activeSession else {
             state.sessionActive    = false
             state.sessionTaskTitle = ""
@@ -114,12 +123,12 @@ final class DriftEngine {
     }
 
     private var liveOffTaskDwell: TimeInterval {
-        guard config.distractingDomains.contains(state.currentDomain) else { return offTaskAccumulator }
+        guard state.isOffTaskContext else { return offTaskAccumulator }
         return offTaskAccumulator + Date().timeIntervalSince(contextStartTime)
     }
 
     private func accumulateOffTask() {
-        guard config.distractingDomains.contains(state.currentDomain) else { return }
+        guard state.isOffTaskContext else { return }
         offTaskAccumulator += Date().timeIntervalSince(contextStartTime)
     }
 
@@ -129,6 +138,8 @@ final class DriftEngine {
     }
 
     private func evaluate() -> RiskLevel {
+        guard SessionManager.shared.isActive else { return .stable }
+
         var level: RiskLevel = .stable
 
         if state.isIdle && !state.currentApp.isEmpty {
@@ -146,7 +157,7 @@ final class DriftEngine {
             highSwitchRateStart = nil
         }
 
-        if config.distractingDomains.contains(state.currentDomain),
+        if state.isOffTaskContext,
            state.dwellInCurrentContext >= config.distractingDwellThreshold {
             level = max(level, .drift)
         }
@@ -156,8 +167,7 @@ final class DriftEngine {
         }
 
         if !state.isIdle {
-            let onDistractingContext = config.distractingDomains.contains(state.currentDomain)
-            if onDistractingContext {
+            if state.isOffTaskContext {
                 recoveryStart = nil
                 state.recoveryProgress = 0
             } else {
@@ -198,7 +208,11 @@ final class DriftEngine {
         let reason: EngineDecision.Reason = switch state.riskLevel {
             case .stable: .unknown
             case .atRisk: state.isIdle ? .idle : .highSwitching
-            case .drift:  .offContextDwell
+            case .drift:  .offTask
+        }
+
+        let task: EngineDecision.TaskSnapshot? = SessionManager.shared.activeSession.map {
+            .init(id: $0.id.uuidString, name: $0.taskTitle)
         }
 
         let ctx: EngineDecision.ContextSnapshot? = {
@@ -230,7 +244,7 @@ final class DriftEngine {
             severity:    severity,
             reason:      reason,
             riskState:   riskState,
-            task:        nil,
+            task:        task,
             context:     ctx,
             metrics:     metrics,
             actions:     [.return, .snooze5m, .dismiss],

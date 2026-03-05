@@ -6,7 +6,7 @@ struct EngineDecision: Identifiable {
         case low = 0, medium = 1, high = 2
         static func < (l: Severity, r: Severity) -> Bool { l.rawValue < r.rawValue }
     }
-    enum Reason         { case offContextDwell, highSwitching, idle, unknown }
+    enum Reason         { case offContextDwell, offTask, highSwitching, idle, unknown }
     enum RiskState      { case stable, atRisk, drift }
     enum Action         { case `return`, snooze5m, endSession, dismiss }
     enum ChannelHint    { case notification, overlay, either }

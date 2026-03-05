@@ -65,12 +65,14 @@ struct SessionStartView: View {
                 conflicting: $allowedApps
             )
 
-            AppPickerSection(
-                title:       "Allowed Apps",
-                apps:        runningApps,
-                selected:    $allowedApps,
-                conflicting: $blockedApps
-            )
+            if strictness == .strict {
+                AppPickerSection(
+                    title:       "Allowed Apps",
+                    apps:        runningApps,
+                    selected:    $allowedApps,
+                    conflicting: $blockedApps
+                )
+            }
 
             Button("Start Session") { tryStart() }
                 .buttonStyle(PrimaryButtonStyle())
