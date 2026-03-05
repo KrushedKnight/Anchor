@@ -9,5 +9,6 @@ struct AnchorApp: App {
             ContentView()
         }
         .defaultLaunchBehavior(.presented)
+        .windowLevel(.floating)
     }
 }

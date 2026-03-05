@@ -15,6 +15,7 @@ struct ContentView: View {
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
                 }
+                .scrollContentBackground(.hidden)
                 .onChange(of: store.log.count) {
                     if let last = store.log.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
@@ -22,7 +23,8 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 680, minHeight: 420)
+        .frame(minWidth: 400, minHeight: 120)
+        .background(VisualEffect().ignoresSafeArea())
     }
 }
 
@@ -85,12 +87,12 @@ struct EventRow: View {
             Text(formattedTime(event.ts))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 90, alignment: .leading)
+                .frame(width: 80, alignment: .leading)
 
             Text(event.type)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(typeColor)
-                .frame(width: 130, alignment: .leading)
+                .frame(width: 110, alignment: .leading)
 
             Text(dataString)
                 .font(.system(.caption, design: .monospaced))
@@ -130,3 +132,14 @@ private let timeFormatter: DateFormatter = {
     f.dateFormat = "HH:mm:ss.SSS"
     return f
 }()
+
+private struct VisualEffect: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material     = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state        = .active
+        return view
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
