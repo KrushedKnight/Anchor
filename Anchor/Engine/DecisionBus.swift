@@ -1,6 +1,8 @@
 import Foundation
 
 final class DecisionBus {
+    static let shared = DecisionBus()
+
     private var continuation: AsyncStream<EngineDecision>.Continuation?
     private var nextId: Int64 = 0
 

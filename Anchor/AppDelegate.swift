@@ -2,9 +2,11 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let appObserver   = ActiveAppObserver()
-    let idleMonitor   = IdleMonitor()
-    let chromeMonitor = ChromeURLMonitor()
+    let appObserver         = ActiveAppObserver()
+    let idleMonitor         = IdleMonitor()
+    let chromeMonitor       = ChromeURLMonitor()
+    let interventionEngine  = InterventionEngine.shared
+    let notificationHandler = NotificationHandler.shared
 
     private var widgetPanel: NSPanel?
 
@@ -13,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         idleMonitor.start()
         chromeMonitor.start()
         DriftEngine.shared.start()
+        interventionEngine.start()
+        notificationHandler.start()
 
         DispatchQueue.main.async {
             if let window = NSApp.windows.first {
@@ -26,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupWidgetPanel() {
         let panel = NSPanel(
             contentRect: .zero,
-            styleMask:   [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
+            styleMask:   [.borderless, .nonactivatingPanel],
             backing:     .buffered,
             defer:       false
         )
@@ -35,13 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isOpaque                     = false
         panel.backgroundColor              = .clear
         panel.hasShadow                    = true
-        panel.titleVisibility              = .hidden
-        panel.titlebarAppearsTransparent   = true
         panel.isMovableByWindowBackground  = true
         panel.collectionBehavior           = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         let hosting = NSHostingView(rootView: WidgetView())
         hosting.setFrameSize(hosting.fittingSize)
+        hosting.wantsLayer = true
+        hosting.layer?.cornerRadius = 12
+        hosting.layer?.masksToBounds = true
         panel.contentView = hosting
         panel.setContentSize(hosting.fittingSize)
 
@@ -69,5 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         idleMonitor.stop()
         chromeMonitor.stop()
         DriftEngine.shared.stop()
+        interventionEngine.stop()
+        notificationHandler.stop()
     }
 }

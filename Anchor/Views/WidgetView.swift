@@ -4,28 +4,34 @@ struct WidgetView: View {
     var engine = DriftEngine.shared
 
     var body: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(riskColor)
-                    .frame(width: 8, height: 8)
-                Text(riskLabel)
-                    .font(.system(.caption, design: .monospaced).bold())
-                    .foregroundStyle(riskColor)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Anchor")
+                .font(.system(.caption, design: .monospaced).weight(.heavy))
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 14) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(riskColor)
+                        .frame(width: 8, height: 8)
+                    Text(riskLabel)
+                        .font(.system(.caption, design: .monospaced).bold())
+                        .foregroundStyle(riskColor)
+                }
+
+                Divider().frame(height: 12)
+
+                Text("dwell \(Int(engine.state.dwellInCurrentContext))s")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
+                Text("\(String(format: "%.1f", engine.state.switchesPerMinute)) sw/min")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
             }
-
-            Divider().frame(height: 12)
-
-            Text("dwell \(Int(engine.state.dwellInCurrentContext))s")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-
-            Text("\(String(format: "%.1f", engine.state.switchesPerMinute)) sw/min")
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.vertical, 10)
         .background(WidgetVisualEffect().ignoresSafeArea())
     }
 

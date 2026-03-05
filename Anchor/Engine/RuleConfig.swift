@@ -24,11 +24,11 @@ struct RuleConfig {
             "netflix.com",
             "hulu.com"
         ],
-        switchRateThreshold:        6,
-        switchRateSustainedWindow:  30,
-        distractingDwellThreshold:  120,
-        totalOffTaskDwellThreshold: 300,
-        recoveryWindow:             120,
-        evaluationInterval:         5
+        switchRateThreshold:        2,
+        switchRateSustainedWindow:  5,
+        distractingDwellThreshold:  5,
+        totalOffTaskDwellThreshold: 10,
+        recoveryWindow:             15,
+        evaluationInterval:         2
     )
 }
