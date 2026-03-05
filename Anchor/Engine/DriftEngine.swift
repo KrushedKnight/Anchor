@@ -2,7 +2,7 @@ import Foundation
 
 @Observable
 final class DriftEngine {
-    static let shared = DriftEngine()
+    static let shared = DriftEngine(bus: .shared)
 
     private(set) var state = EngineState()
     var config = RuleConfig.defaults
@@ -10,15 +10,13 @@ final class DriftEngine {
     private var lastSeenId:            Int64  = -1
     private var timer:                 Timer?
 
-    // switch-rate tracking
     private var switchTimestamps:      [Date] = []
 
-    // dwell tracking
     private var contextStartTime:      Date   = .now
     private var offTaskAccumulator:    TimeInterval = 0
     private var highSwitchRateStart:   Date?
+    private var recoveryStart:         Date?
 
-    // decision publishing
     private let bus:                   DecisionBus?
     private var lastPublishedRiskLevel: RiskLevel?
 
@@ -41,8 +39,10 @@ final class DriftEngine {
         let newEvents = EventStore.shared.slice(after: lastSeenId)
         if let last = newEvents.last { lastSeenId = last.id }
         process(newEvents)
-        state.riskLevel       = evaluate()
-        state.lastEvaluatedAt = .now
+        state.riskLevel         = evaluate()
+        state.totalOffTaskDwell = liveOffTaskDwell
+        state.lastEvaluatedAt   = .now
+        print("[DriftEngine] tick → riskLevel=\(state.riskLevel), domain=\(state.currentDomain), dwell=\(Int(state.dwellInCurrentContext))s offTask=\(Int(liveOffTaskDwell))s")
         maybePublish()
     }
 
@@ -51,8 +51,14 @@ final class DriftEngine {
             switch event.type {
 
             case "active_app":
-                state.currentApp    = event.data["appName"] ?? ""
-                contextStartTime    = .now
+                let newApp = event.data["appName"] ?? ""
+                if !config.knownBrowsers.contains(newApp) && !state.currentDomain.isEmpty {
+                    accumulateOffTask()
+                    state.currentDomain = ""
+                    print("[DriftEngine] domain cleared, recovery started")
+                }
+                state.currentApp = newApp
+                contextStartTime = .now
 
             case "browser_domain":
                 let domain = event.data["domain"] ?? ""
@@ -76,14 +82,18 @@ final class DriftEngine {
         }
 
         pruneOldSwitches()
-        state.switchesPerMinute    = Double(switchTimestamps.count)
+        state.switchesPerMinute     = Double(switchTimestamps.count)
         state.dwellInCurrentContext = Date().timeIntervalSince(contextStartTime)
+    }
+
+    private var liveOffTaskDwell: TimeInterval {
+        guard config.distractingDomains.contains(state.currentDomain) else { return offTaskAccumulator }
+        return offTaskAccumulator + Date().timeIntervalSince(contextStartTime)
     }
 
     private func accumulateOffTask() {
         guard config.distractingDomains.contains(state.currentDomain) else { return }
         offTaskAccumulator += Date().timeIntervalSince(contextStartTime)
-        state.totalOffTaskDwell = offTaskAccumulator
     }
 
     private func pruneOldSwitches() {
@@ -94,12 +104,10 @@ final class DriftEngine {
     private func evaluate() -> RiskLevel {
         var level: RiskLevel = .stable
 
-        // Rule 1 — idle during an active (non-empty) session
         if state.isIdle && !state.currentApp.isEmpty {
             level = max(level, .atRisk)
         }
 
-        // Rule 2 — high tab-switch rate sustained for the configured window
         let switchRate = state.switchesPerMinute
         if switchRate >= config.switchRateThreshold {
             if highSwitchRateStart == nil { highSwitchRateStart = .now }
@@ -111,24 +119,41 @@ final class DriftEngine {
             highSwitchRateStart = nil
         }
 
-        // Rule 3 — dwelling on a distracting domain too long
         if config.distractingDomains.contains(state.currentDomain),
            state.dwellInCurrentContext >= config.distractingDwellThreshold {
             level = max(level, .drift)
         }
 
-        // Rule 4 — total off-task dwell exceeds threshold
-        accumulateOffTask()
-        if state.totalOffTaskDwell >= config.totalOffTaskDwellThreshold {
+        if liveOffTaskDwell >= config.totalOffTaskDwellThreshold {
             level = max(level, .drift)
+        }
+
+        if !state.isIdle {
+            let onDistractingContext = config.distractingDomains.contains(state.currentDomain)
+            if onDistractingContext {
+                recoveryStart = nil
+                state.recoveryProgress = 0
+            } else {
+                if recoveryStart == nil { recoveryStart = .now }
+                let elapsed = Date().timeIntervalSince(recoveryStart!)
+                if elapsed >= config.recoveryWindow {
+                    offTaskAccumulator = 0
+                    recoveryStart = nil
+                    state.recoveryProgress = 0
+                    print("[DriftEngine] recovery complete, accumulator reset")
+                } else {
+                    state.recoveryProgress = elapsed / config.recoveryWindow
+                }
+            }
         }
 
         return level
     }
 
     private func maybePublish() {
-        guard let bus else { return }
-        guard state.riskLevel != lastPublishedRiskLevel else { return }
+        guard let bus else { print("[DriftEngine] maybePublish: no bus, skipping"); return }
+        if state.riskLevel == .stable && lastPublishedRiskLevel == .stable { return }
+        print("[DriftEngine] publishing decision: \(state.riskLevel)")
         lastPublishedRiskLevel = state.riskLevel
 
         let severity: EngineDecision.Severity = switch state.riskLevel {
@@ -160,7 +185,7 @@ final class DriftEngine {
 
         let metrics = EngineDecision.MetricsSnapshot(
             switchesPerMin:             state.switchesPerMinute,
-            offContextSeconds:          state.totalOffTaskDwell,
+            offContextSeconds:          liveOffTaskDwell,
             idleSeconds:                0,
             currentContextDwellSeconds: state.dwellInCurrentContext
         )

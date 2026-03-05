@@ -1,14 +1,17 @@
 import Foundation
 
 struct RuleConfig {
+    var knownBrowsers:               Set<String>
     var distractingDomains:          Set<String>
     var switchRateThreshold:         Double           // switches/min → atRisk
     var switchRateSustainedWindow:   TimeInterval     // how long rate must stay high
     var distractingDwellThreshold:   TimeInterval     // single-domain dwell → drift
     var totalOffTaskDwellThreshold:  TimeInterval     // cumulative off-task → drift
+    var recoveryWindow:              TimeInterval     // clean work needed to reset accumulator
     var evaluationInterval:          TimeInterval     // engine tick rate
 
     static let defaults = RuleConfig(
+        knownBrowsers: ["Google Chrome", "Firefox", "Safari"],
         distractingDomains: [
             "youtube.com",
             "reddit.com",
@@ -21,10 +24,11 @@ struct RuleConfig {
             "netflix.com",
             "hulu.com"
         ],
-        switchRateThreshold:        3,
-        switchRateSustainedWindow:  10,
-        distractingDwellThreshold:  20,
-        totalOffTaskDwellThreshold: 45,
-        evaluationInterval:         3
+        switchRateThreshold:        6,
+        switchRateSustainedWindow:  30,
+        distractingDwellThreshold:  120,
+        totalOffTaskDwellThreshold: 300,
+        recoveryWindow:             120,
+        evaluationInterval:         5
     )
 }

@@ -8,6 +8,7 @@ struct EngineState {
     var switchesPerMinute:       Double           = 0
     var dwellInCurrentContext:   TimeInterval     = 0
     var totalOffTaskDwell:       TimeInterval     = 0
+    var recoveryProgress:        Double           = 0
     var lastInterventionTime:    Date?            = nil
     var lastEvaluatedAt:         Date             = .distantPast
 }
