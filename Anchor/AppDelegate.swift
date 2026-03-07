@@ -2,11 +2,14 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let appObserver         = ActiveAppObserver()
-    let idleMonitor         = IdleMonitor()
-    let chromeMonitor       = ChromeURLMonitor()
-    let interventionEngine  = InterventionEngine.shared
-    let notificationHandler = NotificationHandler.shared
+    let appObserver              = ActiveAppObserver()
+    let idleMonitor              = IdleMonitor()
+    let chromeMonitor            = ChromeURLMonitor()
+    let windowTitleObserver      = WindowTitleObserver()
+    let heartbeatMonitor         = ActivityHeartbeatMonitor()
+    let interventionRecorder     = InterventionEventRecorder()
+    let interventionEngine       = InterventionEngine.shared
+    let notificationHandler      = NotificationHandler.shared
 
     private var widgetPanel: NSPanel?
 
@@ -14,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appObserver.start()
         idleMonitor.start()
         chromeMonitor.start()
+        windowTitleObserver.start()
+        heartbeatMonitor.start()
+        interventionRecorder.start()
         DriftEngine.shared.start()
         interventionEngine.start()
         notificationHandler.start()
@@ -93,6 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appObserver.stop()
         idleMonitor.stop()
         chromeMonitor.stop()
+        windowTitleObserver.stop()
+        heartbeatMonitor.stop()
+        interventionRecorder.stop()
         DriftEngine.shared.stop()
         interventionEngine.stop()
         notificationHandler.stop()

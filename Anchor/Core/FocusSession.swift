@@ -6,10 +6,12 @@ struct FocusSession {
         case strict = "Strict"
     }
 
-    var id:          UUID         = UUID()
-    var startedAt:   Date         = .now
-    var taskTitle:   String
-    var strictness:  Strictness
-    var allowedApps: Set<String>  = []
-    var blockedApps: Set<String>  = []
+    var id:             UUID         = UUID()
+    var startedAt:      Date         = .now
+    var taskTitle:      String
+    var strictness:     Strictness
+    var allowedApps:    Set<String>  = []
+    var blockedApps:    Set<String>  = []
+    var allowedDomains: Set<String>  = []
+    var blockedDomains: Set<String>  = []
 }
