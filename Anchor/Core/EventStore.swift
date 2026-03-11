@@ -28,4 +28,9 @@ final class EventStore {
     func slice(after id: Int64) -> [AnchorEvent] {
         log.filter { $0.id > id }
     }
+
+    func recent(seconds: TimeInterval) -> [AnchorEvent] {
+        let cutoff = Date().addingTimeInterval(-seconds).timeIntervalSince1970
+        return log.filter { $0.ts >= cutoff }
+    }
 }
