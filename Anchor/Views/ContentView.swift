@@ -143,11 +143,116 @@ struct SessionActiveView: View {
                 }
             }
 
+            DebugPanel(state: engine.state, snap: BehaviorAnalyzer.shared.snapshot, config: engine.config)
+
             Button("End Session") { SessionManager.shared.end() }
                 .buttonStyle(DestructiveButtonStyle())
         }
         .padding(28)
         .frame(width: 320)
+    }
+}
+
+private extension RiskLevel {
+    var debugLabel: String {
+        switch self { case .stable: "STABLE"; case .atRisk: "AT RISK"; case .drift: "DRIFT" }
+    }
+    var debugColor: Color {
+        switch self { case .stable: .green; case .atRisk: .orange; case .drift: .red }
+    }
+}
+
+private struct DebugPanel: View {
+    var state:  EngineState
+    var snap:   BehaviorSnapshot
+    var config: RuleConfig
+
+    private var ruleIdleActive:     Bool { snap.isIdle && !snap.currentApp.isEmpty }
+    private var ruleHighSwitchRate: Bool { snap.switchesPerMinute >= config.switchRateThreshold }
+    private var ruleOffTaskDwell:   Bool { state.isOffTaskContext && snap.dwellInCurrentContext >= config.distractingDwellThreshold }
+    private var ruleTotalOffTask:   Bool { state.totalOffTaskDwell >= config.totalOffTaskDwellThreshold }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            Text("DEBUG")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.orange)
+
+            HStack(spacing: 4) {
+                Text("Risk")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text(state.riskLevel.debugLabel)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(state.riskLevel.debugColor)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("RULES")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                DebugRule(label: "idle + active app → atRisk",          firing: ruleIdleActive)
+                DebugRule(label: "switches/min ≥ \(Int(config.switchRateThreshold)) → atRisk",  firing: ruleHighSwitchRate)
+                DebugRule(label: "off-task dwell ≥ \(Int(config.distractingDwellThreshold))s → drift", firing: ruleOffTaskDwell)
+                DebugRule(label: "total off-task ≥ \(Int(config.totalOffTaskDwellThreshold))s → drift", firing: ruleTotalOffTask)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("METRICS")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                DebugMetric(label: "app",            value: snap.currentApp.isEmpty ? "—" : snap.currentApp)
+                DebugMetric(label: "domain",         value: snap.currentDomain.isEmpty ? "—" : snap.currentDomain)
+                DebugMetric(label: "idle",           value: snap.isIdle ? "yes" : "no")
+                DebugMetric(label: "app sw/30s",     value: String(format: "%.0f", snap.appSwitchRate30s))
+                DebugMetric(label: "tab sw/30s",     value: String(format: "%.0f", snap.tabSwitchRate30s))
+                DebugMetric(label: "sw/min",         value: String(format: "%.1f", snap.switchesPerMinute))
+                DebugMetric(label: "dwell",          value: formatSec(snap.dwellInCurrentContext))
+                DebugMetric(label: "focus streak",   value: formatSec(snap.currentFocusStreak))
+                DebugMetric(label: "idle ratio 2m",  value: String(format: "%.1f%%", snap.idleRatio120s * 100))
+                DebugMetric(label: "off-task total", value: formatSec(state.totalOffTaskDwell))
+                DebugMetric(label: "recovery",       value: String(format: "%.0f%%", state.recoveryProgress * 100))
+                DebugMetric(label: "off-task ctx",   value: state.isOffTaskContext ? "yes" : "no")
+            }
+        }
+    }
+
+    private func formatSec(_ t: TimeInterval) -> String {
+        t < 60 ? String(format: "%.0fs", t) : String(format: "%.1fm", t / 60)
+    }
+}
+
+private struct DebugRule: View {
+    var label:  String
+    var firing: Bool
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(firing ? "●" : "○")
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(firing ? Color.red : Color.secondary.opacity(0.5))
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(firing ? Color.primary : Color.secondary)
+        }
+    }
+}
+
+private struct DebugMetric: View {
+    var label: String
+    var value: String
+    var body: some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+            Text(value)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.primary)
+        }
     }
 }
 

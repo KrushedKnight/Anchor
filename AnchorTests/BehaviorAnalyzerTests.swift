@@ -1,6 +1,7 @@
 import XCTest
 @testable import Anchor
 
+@MainActor
 final class BehaviorAnalyzerTests: XCTestCase {
 
     private func makeStore(events: [(type: String, data: [String: String])]) -> EventStore {
