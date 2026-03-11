@@ -9,9 +9,9 @@ final class DriftEngine {
 
     private var timer:               Timer?
     private var offTaskAccumulator:  TimeInterval = 0
-    private var highSwitchRateStart: Date?
-    private var recoveryStart:       Date?
-    private var lastOffTaskContext:  Bool = false
+    private var focusScore:          Double       = 1.0
+    private var pendingLevel:        RiskLevel    = .stable
+    private var pendingTicks:        Int          = 0
     private var lastSessionId:       UUID?
 
     private let bus:                     DecisionBus?
@@ -40,11 +40,15 @@ final class DriftEngine {
 
         syncState(from: snap)
         classifyOffTask()
-        accumulateAndRecover()
-        state.riskLevel         = evaluate(snap)
-        state.totalOffTaskDwell = liveOffTaskDwell(snap)
-        state.lastEvaluatedAt   = .now
-        print("[DriftEngine] tick → riskLevel=\(state.riskLevel), offTask=\(state.isOffTaskContext), app=\(state.currentApp), domain=\(state.currentDomain)")
+        decayAccumulator()
+        updateFocusScore(snap)
+
+        state.totalOffTaskDwell  = liveOffTaskDwell(snap)
+        state.accumulatorSeconds = offTaskAccumulator
+        state.focusStreakSeconds  = snap.currentFocusStreak
+        state.lastEvaluatedAt    = .now
+
+        print("[DriftEngine] score=\(String(format: "%.2f", focusScore)) risk=\(state.riskLevel) pressure=\(state.dominantPressureSource)")
         maybePublish(snap)
     }
 
@@ -64,10 +68,11 @@ final class DriftEngine {
     private func classifyOffTask() {
         let currentSessionId = SessionManager.shared.activeSession?.id
         if currentSessionId != lastSessionId {
-            offTaskAccumulator     = 0
-            recoveryStart          = nil
-            state.recoveryProgress = 0
-            lastSessionId          = currentSessionId
+            offTaskAccumulator = 0
+            focusScore         = 1.0
+            pendingLevel       = .stable
+            pendingTicks       = 0
+            lastSessionId      = currentSessionId
         }
 
         guard let session = SessionManager.shared.activeSession else {
@@ -95,24 +100,119 @@ final class DriftEngine {
         }
     }
 
-    private func accumulateAndRecover() {
-        guard !state.isIdle else { return }
+    private func decayAccumulator() {
+        guard !state.isIdle && !state.isOffTaskContext && offTaskAccumulator > 0 else { return }
+        offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * config.evaluationInterval)
+    }
 
-        if state.isOffTaskContext {
-            recoveryStart          = nil
-            state.recoveryProgress = 0
+    private func updateFocusScore(_ snap: BehaviorSnapshot) {
+        guard state.sessionActive else {
+            focusScore = 1.0
+            state.focusScore             = 1.0
+            state.riskLevel              = .stable
+            state.dominantPressureSource = .none
+            return
+        }
+
+        let (target, dominant) = computeTargetScore(snap)
+
+        let diff = target - focusScore
+        if diff < 0 {
+            focusScore += max(diff, -0.05)
         } else {
-            if recoveryStart == nil { recoveryStart = .now }
-            let elapsed = Date().timeIntervalSince(recoveryStart!)
-            if elapsed >= config.recoveryWindow {
-                offTaskAccumulator = 0
-                recoveryStart      = nil
-                state.recoveryProgress = 0
-                print("[DriftEngine] recovery complete, accumulator reset")
+            focusScore += min(diff, 0.08)
+        }
+        focusScore = max(0.0, min(1.0, focusScore))
+
+        let desiredLevel         = levelFromScore(focusScore)
+        state.riskLevel          = applyHysteresis(desired: desiredLevel)
+        state.focusScore         = focusScore
+        state.dominantPressureSource = dominant
+    }
+
+    private func computeTargetScore(_ snap: BehaviorSnapshot) -> (Double, PressureSource) {
+        let offTaskPressure: Double = state.isOffTaskContext ? 0.8 : 0.0
+
+        let scatterRaw = Double(max(0, snap.distinctApps5m - config.scatterAppsThreshold)) / 4.0
+        var scatterPressure = min(scatterRaw, 1.0) * 0.35
+
+        var dwellPressure: Double = 0
+        if !snap.recentAppDwells.isEmpty {
+            let avgDwell = snap.recentAppDwells.map(\.duration).reduce(0, +) / Double(snap.recentAppDwells.count)
+            if avgDwell < config.dwellSkimmingThreshold {
+                dwellPressure = 0.25
             } else {
-                state.recoveryProgress = elapsed / config.recoveryWindow
+                let ratio = min((avgDwell - config.dwellSkimmingThreshold) / (60.0 - config.dwellSkimmingThreshold), 1.0)
+                dwellPressure = (1.0 - ratio) * 0.25
             }
         }
+
+        if snap.isBouncing {
+            scatterPressure *= (1.0 - config.bouncingSuppression)
+            dwellPressure   *= (1.0 - config.bouncingSuppression)
+        }
+
+        let idleExcess   = max(0, snap.idleRatio120s - config.idleRatioPressureFloor)
+        let idlePressure = min(idleExcess / config.idleRatioPressureFloor, 1.0) * 0.20
+
+        let accumulatorPressure = min(offTaskAccumulator / config.totalOffTaskDwellThreshold, 1.0) * 0.30
+
+        let streakBonus = min(snap.currentFocusStreak / config.focusStreakBonusWindow, 1.0) * 0.15
+
+        let target = max(0.0, min(1.0,
+            1.0
+            - offTaskPressure
+            - scatterPressure
+            - dwellPressure
+            - idlePressure
+            - accumulatorPressure
+            + streakBonus
+        ))
+
+        let pressures: [(PressureSource, Double)] = [
+            (.offTaskContext, offTaskPressure),
+            (.scatter,        scatterPressure),
+            (.skimming,       dwellPressure),
+            (.idleRatio,      idlePressure),
+            (.accumulator,    accumulatorPressure)
+        ]
+        let top = pressures.max(by: { $0.1 < $1.1 })
+        let dominant: PressureSource = (top?.1 ?? 0) > 0.05 ? (top?.0 ?? .none) : .none
+
+        return (target, dominant)
+    }
+
+    private func levelFromScore(_ score: Double) -> RiskLevel {
+        switch state.riskLevel {
+        case .stable:
+            return score < config.atRiskEnterThreshold ? .atRisk : .stable
+        case .atRisk:
+            if score < config.driftEnterThreshold { return .drift }
+            if score > config.atRiskExitThreshold { return .stable }
+            return .atRisk
+        case .drift:
+            return score > config.driftExitThreshold ? .atRisk : .drift
+        }
+    }
+
+    private func applyHysteresis(desired: RiskLevel) -> RiskLevel {
+        if desired == state.riskLevel {
+            pendingLevel = desired
+            pendingTicks = 0
+            return state.riskLevel
+        }
+
+        if desired == pendingLevel {
+            pendingTicks += 1
+        } else {
+            pendingLevel = desired
+            pendingTicks = 1
+        }
+
+        let gettingWorse = desired.rawValue > state.riskLevel.rawValue
+        let required     = gettingWorse ? 2 : (desired == .stable ? 3 : 4)
+
+        return pendingTicks >= required ? desired : state.riskLevel
     }
 
     private func liveOffTaskDwell(_ snap: BehaviorSnapshot) -> TimeInterval {
@@ -120,39 +220,10 @@ final class DriftEngine {
         return offTaskAccumulator + snap.dwellInCurrentContext
     }
 
-    private func evaluate(_ snap: BehaviorSnapshot) -> RiskLevel {
-        guard SessionManager.shared.isActive else { return .stable }
-
-        var level: RiskLevel = .stable
-
-        if snap.isIdle && !snap.currentApp.isEmpty {
-            level = max(level, .atRisk)
-        }
-
-        if snap.switchesPerMinute >= config.switchRateThreshold {
-            if highSwitchRateStart == nil { highSwitchRateStart = .now }
-            let sustained = Date().timeIntervalSince(highSwitchRateStart!)
-            if sustained >= config.switchRateSustainedWindow {
-                level = max(level, .atRisk)
-            }
-        } else {
-            highSwitchRateStart = nil
-        }
-
-        if state.isOffTaskContext && snap.dwellInCurrentContext >= config.distractingDwellThreshold {
-            level = max(level, .drift)
-        }
-
-        if liveOffTaskDwell(snap) >= config.totalOffTaskDwellThreshold {
-            level = max(level, .drift)
-        }
-
-        return level
-    }
-
     private func maybePublish(_ snap: BehaviorSnapshot) {
         guard let bus else { print("[DriftEngine] maybePublish: no bus, skipping"); return }
-        if state.riskLevel == .stable && lastPublishedRiskLevel == .stable { return }
+        guard state.riskLevel != lastPublishedRiskLevel else { return }
+
         print("[DriftEngine] publishing decision: \(state.riskLevel)")
         lastPublishedRiskLevel = state.riskLevel
 
@@ -168,10 +239,12 @@ final class DriftEngine {
             case .drift:  .drift
         }
 
-        let reason: EngineDecision.Reason = switch state.riskLevel {
-            case .stable: .unknown
-            case .atRisk: snap.isIdle ? .idle : .highSwitching
-            case .drift:  .offTask
+        let reason: EngineDecision.Reason = switch state.dominantPressureSource {
+            case .offTaskContext: .offTask
+            case .scatter, .skimming: .highSwitching
+            case .idleRatio: .idle
+            case .accumulator: .offTask
+            case .none: .unknown
         }
 
         let task: EngineDecision.TaskSnapshot? = SessionManager.shared.activeSession.map {

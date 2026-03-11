@@ -123,7 +123,7 @@ final class BehaviorAnalyzer {
             isIdle:                isIdle,
             appSwitchRate30s:      Double(appIn30.count),
             tabSwitchRate30s:      Double(tabIn30.count),
-            switchesPerMinute:     Double(appIn60.count + tabSwitchTimestamps.count),
+            switchesPerMinute:     Double(appIn30.count + tabIn30.count),
             distinctApps5m:        Set(appSwitchTimestamps.map { $0.app }).count,
             isBouncing:            isBouncing,
             recentAppDwells:       recentAppDwells,

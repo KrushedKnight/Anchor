@@ -143,7 +143,7 @@ struct SessionActiveView: View {
                 }
             }
 
-            DebugPanel(state: engine.state, snap: BehaviorAnalyzer.shared.snapshot, config: engine.config)
+            DebugPanel(state: engine.state, snap: BehaviorAnalyzer.shared.snapshot)
 
             Button("End Session") { SessionManager.shared.end() }
                 .buttonStyle(DestructiveButtonStyle())
@@ -163,14 +163,8 @@ private extension RiskLevel {
 }
 
 private struct DebugPanel: View {
-    var state:  EngineState
-    var snap:   BehaviorSnapshot
-    var config: RuleConfig
-
-    private var ruleIdleActive:     Bool { snap.isIdle && !snap.currentApp.isEmpty }
-    private var ruleHighSwitchRate: Bool { snap.switchesPerMinute >= config.switchRateThreshold }
-    private var ruleOffTaskDwell:   Bool { state.isOffTaskContext && snap.dwellInCurrentContext >= config.distractingDwellThreshold }
-    private var ruleTotalOffTask:   Bool { state.totalOffTaskDwell >= config.totalOffTaskDwellThreshold }
+    var state: EngineState
+    var snap:  BehaviorSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -189,14 +183,28 @@ private struct DebugPanel: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("RULES")
+                Text("SCORE")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
-                DebugRule(label: "idle + active app → atRisk",                              firing: ruleIdleActive)
-                DebugRule(label: "ctx sw/min ≥ \(Int(config.switchRateThreshold)) → atRisk", firing: ruleHighSwitchRate)
-                DebugRule(label: "off-task dwell ≥ \(Int(config.distractingDwellThreshold))s → drift", firing: ruleOffTaskDwell)
-                DebugRule(label: "total off-task ≥ \(Int(config.totalOffTaskDwellThreshold))s → drift", firing: ruleTotalOffTask)
+                HStack(spacing: 6) {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.primary.opacity(0.08))
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(scoreColor)
+                                .frame(width: geo.size.width * state.focusScore)
+                        }
+                    }
+                    .frame(height: 6)
+                    Text(String(format: "%.0f%%", state.focusScore * 100))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(scoreColor)
+                        .frame(width: 30, alignment: .trailing)
+                }
+                DebugMetric(label: "pressure",    value: pressureLabel)
+                DebugMetric(label: "accumulator", value: formatSec(state.accumulatorSeconds))
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -216,7 +224,6 @@ private struct DebugPanel: View {
                 DebugMetric(label: "focus streak",   value: formatSec(snap.currentFocusStreak))
                 DebugMetric(label: "idle ratio 2m",  value: String(format: "%.1f%%", snap.idleRatio120s * 100))
                 DebugMetric(label: "off-task total", value: formatSec(state.totalOffTaskDwell))
-                DebugMetric(label: "recovery",       value: String(format: "%.0f%%", state.recoveryProgress * 100))
                 DebugMetric(label: "off-task ctx",   value: state.isOffTaskContext ? "yes" : "no")
             }
 
@@ -231,6 +238,25 @@ private struct DebugPanel: View {
                     }
                 }
             }
+        }
+    }
+
+    private var scoreColor: Color {
+        switch state.riskLevel {
+        case .stable: .green
+        case .atRisk: .orange
+        case .drift:  .red
+        }
+    }
+
+    private var pressureLabel: String {
+        switch state.dominantPressureSource {
+        case .none:           "none"
+        case .offTaskContext: "off-task app"
+        case .scatter:        "scattered (\(snap.distinctApps5m) apps/5m)"
+        case .skimming:       "short dwells"
+        case .idleRatio:      "high idle"
+        case .accumulator:    "history"
         }
     }
 
