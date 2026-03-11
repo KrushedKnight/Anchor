@@ -193,8 +193,8 @@ private struct DebugPanel: View {
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
-                DebugRule(label: "idle + active app → atRisk",          firing: ruleIdleActive)
-                DebugRule(label: "switches/min ≥ \(Int(config.switchRateThreshold)) → atRisk",  firing: ruleHighSwitchRate)
+                DebugRule(label: "idle + active app → atRisk",                              firing: ruleIdleActive)
+                DebugRule(label: "ctx sw/min ≥ \(Int(config.switchRateThreshold)) → atRisk", firing: ruleHighSwitchRate)
                 DebugRule(label: "off-task dwell ≥ \(Int(config.distractingDwellThreshold))s → drift", firing: ruleOffTaskDwell)
                 DebugRule(label: "total off-task ≥ \(Int(config.totalOffTaskDwellThreshold))s → drift", firing: ruleTotalOffTask)
             }
@@ -209,13 +209,27 @@ private struct DebugPanel: View {
                 DebugMetric(label: "idle",           value: snap.isIdle ? "yes" : "no")
                 DebugMetric(label: "app sw/30s",     value: String(format: "%.0f", snap.appSwitchRate30s))
                 DebugMetric(label: "tab sw/30s",     value: String(format: "%.0f", snap.tabSwitchRate30s))
-                DebugMetric(label: "sw/min",         value: String(format: "%.1f", snap.switchesPerMinute))
+                DebugMetric(label: "ctx sw/min",     value: String(format: "%.0f", snap.switchesPerMinute))
+                DebugMetric(label: "distinct/5m",    value: "\(snap.distinctApps5m) apps")
+                DebugMetric(label: "bouncing",       value: snap.isBouncing ? "YES" : "no")
                 DebugMetric(label: "dwell",          value: formatSec(snap.dwellInCurrentContext))
                 DebugMetric(label: "focus streak",   value: formatSec(snap.currentFocusStreak))
                 DebugMetric(label: "idle ratio 2m",  value: String(format: "%.1f%%", snap.idleRatio120s * 100))
                 DebugMetric(label: "off-task total", value: formatSec(state.totalOffTaskDwell))
                 DebugMetric(label: "recovery",       value: String(format: "%.0f%%", state.recoveryProgress * 100))
                 DebugMetric(label: "off-task ctx",   value: state.isOffTaskContext ? "yes" : "no")
+            }
+
+            if !snap.recentAppDwells.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("RECENT DWELLS")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    ForEach(snap.recentAppDwells.reversed(), id: \.app) { entry in
+                        DebugMetric(label: formatSec(entry.duration), value: entry.app)
+                    }
+                }
             }
         }
     }
