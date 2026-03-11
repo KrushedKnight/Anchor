@@ -7,22 +7,20 @@ final class DriftEngine {
     private(set) var state = EngineState()
     var config = RuleConfig.defaults
 
-    private var lastSeenId:            Int64  = -1
-    private var timer:                 Timer?
+    private var timer:               Timer?
+    private var offTaskAccumulator:  TimeInterval = 0
+    private var highSwitchRateStart: Date?
+    private var recoveryStart:       Date?
+    private var lastOffTaskContext:  Bool = false
+    private var lastSessionId:       UUID?
 
-    private var switchTimestamps:      [Date] = []
+    private let bus:                     DecisionBus?
+    private let analyzer:                BehaviorAnalyzer
+    private var lastPublishedRiskLevel:  RiskLevel?
 
-    private var contextStartTime:      Date   = .now
-    private var offTaskAccumulator:    TimeInterval = 0
-    private var highSwitchRateStart:   Date?
-    private var recoveryStart:         Date?
-
-    private let bus:                   DecisionBus?
-    private var lastPublishedRiskLevel: RiskLevel?
-    private var lastSessionId:          UUID?
-
-    init(bus: DecisionBus? = nil) {
-        self.bus = bus
+    init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared) {
+        self.bus      = bus
+        self.analyzer = analyzer
     }
 
     func start() {
@@ -37,15 +35,30 @@ final class DriftEngine {
     }
 
     private func tick() {
-        let newEvents = EventStore.shared.slice(after: lastSeenId)
-        if let last = newEvents.last { lastSeenId = last.id }
-        process(newEvents)
+        analyzer.update()
+        let snap = analyzer.snapshot
+
+        syncState(from: snap)
         classifyOffTask()
-        state.riskLevel         = evaluate()
-        state.totalOffTaskDwell = liveOffTaskDwell
+        accumulateAndRecover()
+        state.riskLevel         = evaluate(snap)
+        state.totalOffTaskDwell = liveOffTaskDwell(snap)
         state.lastEvaluatedAt   = .now
         print("[DriftEngine] tick → riskLevel=\(state.riskLevel), offTask=\(state.isOffTaskContext), app=\(state.currentApp), domain=\(state.currentDomain)")
-        maybePublish()
+        maybePublish(snap)
+    }
+
+    private func syncState(from snap: BehaviorSnapshot) {
+        if snap.currentApp != state.currentApp || snap.currentDomain != state.currentDomain {
+            if state.isOffTaskContext {
+                offTaskAccumulator += state.dwellInCurrentContext
+            }
+        }
+        state.currentApp            = snap.currentApp
+        state.currentDomain         = snap.currentDomain
+        state.isIdle                = snap.isIdle
+        state.switchesPerMinute     = snap.switchesPerMinute
+        state.dwellInCurrentContext = snap.dwellInCurrentContext
     }
 
     private func classifyOffTask() {
@@ -82,72 +95,41 @@ final class DriftEngine {
         }
     }
 
-    private func process(_ events: [AnchorEvent]) {
-        for event in events {
-            switch event.type {
+    private func accumulateAndRecover() {
+        guard !state.isIdle else { return }
 
-            case "active_app":
-                let newApp = event.data["appName"] ?? ""
-                if !config.knownBrowsers.contains(newApp) && !state.currentDomain.isEmpty {
-                    accumulateOffTask()
-                    state.currentDomain = ""
-                    print("[DriftEngine] domain cleared, recovery started")
-                }
-                state.currentApp = newApp
-                contextStartTime = .now
-
-            case "browser_domain":
-                let domain = event.data["domain"] ?? ""
-                if domain != state.currentDomain {
-                    accumulateOffTask()
-                    state.currentDomain = domain
-                    contextStartTime    = .now
-                }
-                switchTimestamps.append(.now)
-
-            case "idle_start":
-                state.isIdle = true
-
-            case "idle_end":
-                state.isIdle = false
-                contextStartTime = .now
-
-            default:
-                break
+        if state.isOffTaskContext {
+            recoveryStart          = nil
+            state.recoveryProgress = 0
+        } else {
+            if recoveryStart == nil { recoveryStart = .now }
+            let elapsed = Date().timeIntervalSince(recoveryStart!)
+            if elapsed >= config.recoveryWindow {
+                offTaskAccumulator = 0
+                recoveryStart      = nil
+                state.recoveryProgress = 0
+                print("[DriftEngine] recovery complete, accumulator reset")
+            } else {
+                state.recoveryProgress = elapsed / config.recoveryWindow
             }
         }
-
-        pruneOldSwitches()
-        state.switchesPerMinute     = Double(switchTimestamps.count)
-        state.dwellInCurrentContext = Date().timeIntervalSince(contextStartTime)
     }
 
-    private var liveOffTaskDwell: TimeInterval {
+    private func liveOffTaskDwell(_ snap: BehaviorSnapshot) -> TimeInterval {
         guard state.isOffTaskContext else { return offTaskAccumulator }
-        return offTaskAccumulator + Date().timeIntervalSince(contextStartTime)
+        return offTaskAccumulator + snap.dwellInCurrentContext
     }
 
-    private func accumulateOffTask() {
-        guard state.isOffTaskContext else { return }
-        offTaskAccumulator += Date().timeIntervalSince(contextStartTime)
-    }
-
-    private func pruneOldSwitches() {
-        let cutoff = Date().addingTimeInterval(-60)
-        switchTimestamps.removeAll { $0 < cutoff }
-    }
-
-    private func evaluate() -> RiskLevel {
+    private func evaluate(_ snap: BehaviorSnapshot) -> RiskLevel {
         guard SessionManager.shared.isActive else { return .stable }
 
         var level: RiskLevel = .stable
 
-        if state.isIdle && !state.currentApp.isEmpty {
+        if snap.isIdle && !snap.currentApp.isEmpty {
             level = max(level, .atRisk)
         }
 
-        let switchRate = state.switchesPerMinute
-        if switchRate >= config.switchRateThreshold {
+        if snap.switchesPerMinute >= config.switchRateThreshold {
             if highSwitchRateStart == nil { highSwitchRateStart = .now }
             let sustained = Date().timeIntervalSince(highSwitchRateStart!)
             if sustained >= config.switchRateSustainedWindow {
@@ -157,37 +139,18 @@ final class DriftEngine {
             highSwitchRateStart = nil
         }
 
-        if state.isOffTaskContext,
-           state.dwellInCurrentContext >= config.distractingDwellThreshold {
+        if state.isOffTaskContext && snap.dwellInCurrentContext >= config.distractingDwellThreshold {
             level = max(level, .drift)
         }
 
-        if liveOffTaskDwell >= config.totalOffTaskDwellThreshold {
+        if liveOffTaskDwell(snap) >= config.totalOffTaskDwellThreshold {
             level = max(level, .drift)
-        }
-
-        if !state.isIdle {
-            if state.isOffTaskContext {
-                recoveryStart = nil
-                state.recoveryProgress = 0
-            } else {
-                if recoveryStart == nil { recoveryStart = .now }
-                let elapsed = Date().timeIntervalSince(recoveryStart!)
-                if elapsed >= config.recoveryWindow {
-                    offTaskAccumulator = 0
-                    recoveryStart = nil
-                    state.recoveryProgress = 0
-                    print("[DriftEngine] recovery complete, accumulator reset")
-                } else {
-                    state.recoveryProgress = elapsed / config.recoveryWindow
-                }
-            }
         }
 
         return level
     }
 
-    private func maybePublish() {
+    private func maybePublish(_ snap: BehaviorSnapshot) {
         guard let bus else { print("[DriftEngine] maybePublish: no bus, skipping"); return }
         if state.riskLevel == .stable && lastPublishedRiskLevel == .stable { return }
         print("[DriftEngine] publishing decision: \(state.riskLevel)")
@@ -207,7 +170,7 @@ final class DriftEngine {
 
         let reason: EngineDecision.Reason = switch state.riskLevel {
             case .stable: .unknown
-            case .atRisk: state.isIdle ? .idle : .highSwitching
+            case .atRisk: snap.isIdle ? .idle : .highSwitching
             case .drift:  .offTask
         }
 
@@ -216,19 +179,19 @@ final class DriftEngine {
         }
 
         let ctx: EngineDecision.ContextSnapshot? = {
-            if !state.currentDomain.isEmpty {
-                return .init(key: "domain:\(state.currentDomain)", label: state.currentDomain)
-            } else if !state.currentApp.isEmpty {
-                return .init(key: "app:\(state.currentApp)", label: state.currentApp)
+            if !snap.currentDomain.isEmpty {
+                return .init(key: "domain:\(snap.currentDomain)", label: snap.currentDomain)
+            } else if !snap.currentApp.isEmpty {
+                return .init(key: "app:\(snap.currentApp)", label: snap.currentApp)
             }
             return nil
         }()
 
         let metrics = EngineDecision.MetricsSnapshot(
-            switchesPerMin:             state.switchesPerMinute,
-            offContextSeconds:          liveOffTaskDwell,
+            switchesPerMin:             snap.switchesPerMinute,
+            offContextSeconds:          liveOffTaskDwell(snap),
             idleSeconds:                0,
-            currentContextDwellSeconds: state.dwellInCurrentContext
+            currentContextDwellSeconds: snap.dwellInCurrentContext
         )
 
         let decisionType: EngineDecision.DecisionType = switch state.riskLevel {
