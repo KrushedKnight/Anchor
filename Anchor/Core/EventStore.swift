@@ -9,7 +9,7 @@ final class EventStore {
     private var nextId: Int64 = 0
     private let maxEvents = 10_000
 
-    private init() {}
+    init() {}
 
     func append(type: String, data: [String: String]) {
         let event = AnchorEvent(
