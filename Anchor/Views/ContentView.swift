@@ -226,7 +226,7 @@ private struct DebugPanel: View {
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .padding(.top, 2)
-                    ForEach(snap.recentAppDwells.reversed(), id: \.app) { entry in
+                    ForEach(Array(snap.recentAppDwells.reversed().enumerated()), id: \.offset) { _, entry in
                         DebugMetric(label: formatSec(entry.duration), value: entry.app)
                     }
                 }
