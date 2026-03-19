@@ -155,7 +155,7 @@ final class DriftEngine {
         let idleExcess   = max(0, snap.idleRatio120s - config.idleRatioPressureFloor)
         let idlePressure = min(idleExcess / config.idleRatioPressureFloor, 1.0) * 0.20
 
-        let accumulatorPressure = min(offTaskAccumulator / config.totalOffTaskDwellThreshold, 1.0) * 0.30
+        let accumulatorPressure = min(offTaskAccumulator / config.totalOffTaskDwellThreshold, 1.0) * 0.20
 
         let streakBonus = min(snap.currentFocusStreak / config.focusStreakBonusWindow, 1.0) * 0.15
 
@@ -178,6 +178,16 @@ final class DriftEngine {
         ]
         let top = pressures.max(by: { $0.1 < $1.1 })
         let dominant: PressureSource = (top?.1 ?? 0) > 0.05 ? (top?.0 ?? .none) : .none
+
+        state.pressures = PressureBreakdown(
+            offTask:     offTaskPressure,
+            scatter:     scatterPressure,
+            skimming:    dwellPressure,
+            idleRatio:   idlePressure,
+            accumulator: accumulatorPressure,
+            streakBonus: streakBonus,
+            target:      target
+        )
 
         return (target, dominant)
     }

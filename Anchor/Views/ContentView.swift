@@ -203,7 +203,20 @@ private struct DebugPanel: View {
                         .foregroundStyle(scoreColor)
                         .frame(width: 30, alignment: .trailing)
                 }
-                DebugMetric(label: "pressure",    value: pressureLabel)
+                DebugMetric(label: "target", value: String(format: "%.0f%%", state.pressures.target * 100))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("PRESSURES")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                PressureRow(label: "off-task",   value: state.pressures.offTask,     isBonus: false)
+                PressureRow(label: "accumulator",value: state.pressures.accumulator,  isBonus: false)
+                PressureRow(label: "scatter",    value: state.pressures.scatter,      isBonus: false)
+                PressureRow(label: "skimming",   value: state.pressures.skimming,     isBonus: false)
+                PressureRow(label: "idle ratio", value: state.pressures.idleRatio,    isBonus: false)
+                PressureRow(label: "streak",     value: state.pressures.streakBonus,  isBonus: true)
                 DebugMetric(label: "accumulator", value: formatSec(state.accumulatorSeconds))
             }
 
@@ -249,17 +262,6 @@ private struct DebugPanel: View {
         }
     }
 
-    private var pressureLabel: String {
-        switch state.dominantPressureSource {
-        case .none:           "none"
-        case .offTaskContext: "off-task app"
-        case .scatter:        "scattered (\(snap.distinctApps5m) apps/5m)"
-        case .skimming:       "short dwells"
-        case .idleRatio:      "high idle"
-        case .accumulator:    "history"
-        }
-    }
-
     private func formatSec(_ t: TimeInterval) -> String {
         t < 60 ? String(format: "%.0fs", t) : String(format: "%.1fm", t / 60)
     }
@@ -276,6 +278,35 @@ private struct DebugRule: View {
             Text(label)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(firing ? Color.primary : Color.secondary)
+        }
+    }
+}
+
+private struct PressureRow: View {
+    var label:   String
+    var value:   Double
+    var isBonus: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(value > 0.01 ? (isBonus ? Color.green : Color.primary) : Color.secondary)
+                .frame(width: 88, alignment: .leading)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.primary.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(isBonus ? Color.green.opacity(0.7) : Color.red.opacity(0.6))
+                        .frame(width: geo.size.width * min(value / (isBonus ? 0.15 : 0.80), 1.0))
+                }
+            }
+            .frame(height: 5)
+            Text(isBonus ? String(format: "+%.0f%%", value * 100) : String(format: "−%.0f%%", value * 100))
+                .font(.system(size: 10, weight: value > 0.01 ? .semibold : .regular, design: .monospaced))
+                .foregroundStyle(value > 0.01 ? (isBonus ? Color.green : Color.red) : Color.secondary)
+                .frame(width: 36, alignment: .trailing)
         }
     }
 }
