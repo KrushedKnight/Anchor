@@ -79,6 +79,7 @@ final class InterventionEngine {
         )
 
         lastFiredAt = .now
+        SessionStatsAccumulator.shared.recordIntervention(level: currentLevel)
         print("[InterventionEngine] firing intervention: level=\(currentLevel), title=\(intervention.title), channel=\(intervention.channel)")
         interventionBus.publish(intervention)
     }

@@ -5,7 +5,8 @@ final class SessionManager {
     static let shared = SessionManager()
 
     private(set) var activeSession: FocusSession?
-    private(set) var isPaused: Bool = false
+    private(set) var isPaused:      Bool            = false
+    private(set) var lastSummary:   SessionSummary? = nil
 
     var isActive: Bool { activeSession != nil }
 
@@ -62,13 +63,25 @@ final class SessionManager {
         )
     }
 
-    func end(reason: String = "canceled") {
+    func end(reason: String = "manual") {
         guard let session = activeSession else { return }
+
+        let summary = SessionStatsAccumulator.shared.finalize(
+            session:    session,
+            finalState: DriftEngine.shared.state
+        )
+        SessionSummaryStore.shared.save(summary)
+        lastSummary = summary
+
         EventStore.shared.append(
             type: "session_ended",
             data: ["session_id": session.id.uuidString, "end_reason": reason]
         )
         activeSession = nil
-        isPaused = false
+        isPaused      = false
+    }
+
+    func dismissSummary() {
+        lastSummary = nil
     }
 }

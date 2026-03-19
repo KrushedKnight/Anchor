@@ -16,11 +16,13 @@ final class DriftEngine {
 
     private let bus:                     DecisionBus?
     private let analyzer:                BehaviorAnalyzer
+    private let accumulator:             SessionStatsAccumulator
     private var lastPublishedRiskLevel:  RiskLevel?
 
-    init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared) {
-        self.bus      = bus
-        self.analyzer = analyzer
+    init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared, accumulator: SessionStatsAccumulator = .shared) {
+        self.bus         = bus
+        self.analyzer    = analyzer
+        self.accumulator = accumulator
     }
 
     func start() {
@@ -48,6 +50,8 @@ final class DriftEngine {
         state.focusStreakSeconds  = snap.currentFocusStreak
         state.lastEvaluatedAt    = .now
 
+        accumulator.record(state: state, interval: config.evaluationInterval)
+
         print("[DriftEngine] score=\(String(format: "%.2f", focusScore)) risk=\(state.riskLevel) pressure=\(state.dominantPressureSource)")
         maybePublish(snap)
     }
@@ -73,6 +77,7 @@ final class DriftEngine {
             pendingLevel       = .stable
             pendingTicks       = 0
             lastSessionId      = currentSessionId
+            accumulator.reset()
         }
 
         guard let session = SessionManager.shared.activeSession else {

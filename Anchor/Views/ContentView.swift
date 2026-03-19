@@ -8,6 +8,8 @@ struct ContentView: View {
         Group {
             if sessionManager.isActive {
                 SessionActiveView()
+            } else if let summary = sessionManager.lastSummary {
+                SessionSummaryView(summary: summary)
             } else {
                 SessionStartView()
             }
