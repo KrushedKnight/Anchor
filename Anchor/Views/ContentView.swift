@@ -168,8 +168,8 @@ private struct DebugPanel: View {
     var state: EngineState
     var snap:  BehaviorSnapshot
 
-    @State private var keyInput:   String = ""
-    @State private var isEditing:  Bool   = false
+    @State private var editingProvider: APIProvider? = nil
+    @State private var keyInput:        String       = ""
     var apiKeyStore = APIKeyStore.shared
 
     var body: some View {
@@ -258,58 +258,22 @@ private struct DebugPanel: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Divider()
-                Text("ANTHROPIC API KEY")
+                Text("API KEYS")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary)
 
-                if apiKeyStore.isSet && !isEditing {
-                    HStack(spacing: 6) {
-                        Text("sk-ant-●●●●●●●●●●●●")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("change") {
-                            keyInput  = ""
-                            isEditing = true
-                        }
-                        .font(.system(size: 9, design: .monospaced))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        Button("clear") {
-                            apiKeyStore.clear()
-                        }
-                        .font(.system(size: 9, design: .monospaced))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.red)
-                    }
-                } else {
-                    HStack(spacing: 6) {
-                        SecureField("sk-ant-…", text: $keyInput)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 10, design: .monospaced))
-                            .padding(5)
-                            .background(Color.primary.opacity(0.06))
-                            .cornerRadius(4)
-                            .onSubmit { commitKey() }
-                        Button("save") { commitKey() }
-                            .font(.system(size: 9, design: .monospaced))
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color.accentColor)
-                            .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
+                ForEach(APIProvider.allCases) { provider in
+                    APIKeyRow(
+                        provider:        provider,
+                        store:           apiKeyStore,
+                        editingProvider: $editingProvider,
+                        keyInput:        $keyInput
+                    )
                 }
             }
         }
-    }
-
-    private func commitKey() {
-        let trimmed = keyInput.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        apiKeyStore.save(trimmed)
-        keyInput  = ""
-        isEditing = false
     }
 
     private var scoreColor: Color {
@@ -560,6 +524,67 @@ private struct DestructiveButtonStyle: ButtonStyle {
             .background(Color.red.opacity(configuration.isPressed ? 0.65 : 0.8))
             .foregroundStyle(.white)
             .cornerRadius(8)
+    }
+}
+
+private struct APIKeyRow: View {
+    var provider:        APIProvider
+    var store:           APIKeyStore
+    @Binding var editingProvider: APIProvider?
+    @Binding var keyInput:        String
+
+    private var isEditing: Bool { editingProvider == provider }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(provider.displayName.uppercased())
+                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+
+            if store.isSet(for: provider) && !isEditing {
+                HStack(spacing: 6) {
+                    Text("●●●●●●●●●●●●")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("change") {
+                        keyInput        = ""
+                        editingProvider = provider
+                    }
+                    .font(.system(size: 9, design: .monospaced))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    Button("clear") { store.clear(for: provider) }
+                        .font(.system(size: 9, design: .monospaced))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                }
+            } else {
+                HStack(spacing: 6) {
+                    SecureField(provider.placeholder, text: isEditing ? $keyInput : .constant(""))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 10, design: .monospaced))
+                        .padding(5)
+                        .background(Color.primary.opacity(0.06))
+                        .cornerRadius(4)
+                        .onTapGesture { if !isEditing { editingProvider = provider } }
+                        .onSubmit { commit() }
+                    Button("save") { commit() }
+                        .font(.system(size: 9, design: .monospaced))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(!isEditing || keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func commit() {
+        let trimmed = keyInput.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        store.save(trimmed, for: provider)
+        keyInput        = ""
+        editingProvider = nil
     }
 }
 
