@@ -168,6 +168,10 @@ private struct DebugPanel: View {
     var state: EngineState
     var snap:  BehaviorSnapshot
 
+    @State private var keyInput:   String = ""
+    @State private var isEditing:  Bool   = false
+    var apiKeyStore = APIKeyStore.shared
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
@@ -253,7 +257,59 @@ private struct DebugPanel: View {
                     }
                 }
             }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Divider()
+                Text("ANTHROPIC API KEY")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
+                if apiKeyStore.isSet && !isEditing {
+                    HStack(spacing: 6) {
+                        Text("sk-ant-●●●●●●●●●●●●")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("change") {
+                            keyInput  = ""
+                            isEditing = true
+                        }
+                        .font(.system(size: 9, design: .monospaced))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        Button("clear") {
+                            apiKeyStore.clear()
+                        }
+                        .font(.system(size: 9, design: .monospaced))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        SecureField("sk-ant-…", text: $keyInput)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 10, design: .monospaced))
+                            .padding(5)
+                            .background(Color.primary.opacity(0.06))
+                            .cornerRadius(4)
+                            .onSubmit { commitKey() }
+                        Button("save") { commitKey() }
+                            .font(.system(size: 9, design: .monospaced))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.accentColor)
+                            .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+            }
         }
+    }
+
+    private func commitKey() {
+        let trimmed = keyInput.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        apiKeyStore.save(trimmed)
+        keyInput  = ""
+        isEditing = false
     }
 
     private var scoreColor: Color {
