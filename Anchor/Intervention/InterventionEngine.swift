@@ -6,6 +6,7 @@ final class InterventionEngine {
     private let decisionBus:     DecisionBus
     private let interventionBus: InterventionBus
     private let config:          InterventionConfig
+    private let copyProvider:    NudgeCopyProviding
 
     private var driftCycleStart: Date?
     private var lastFiredAt:     Date?
@@ -14,13 +15,15 @@ final class InterventionEngine {
     private var task: Task<Void, Never>?
 
     init(
-        decisionBus:     DecisionBus     = .shared,
-        interventionBus: InterventionBus = .shared,
-        config:          InterventionConfig = .defaults
+        decisionBus:     DecisionBus        = .shared,
+        interventionBus: InterventionBus    = .shared,
+        config:          InterventionConfig = .defaults,
+        copyProvider:    NudgeCopyProviding = TemplateCopyProvider()
     ) {
         self.decisionBus     = decisionBus
         self.interventionBus = interventionBus
         self.config          = config
+        self.copyProvider    = copyProvider
     }
 
     func start() {
@@ -62,17 +65,15 @@ final class InterventionEngine {
         }
 
         let channel: Intervention.Channel = decision.channelHint == .overlay ? .overlay : .notification
-        let title = currentLevel == .soft
-            ? "Hey, you've drifted"
-            : "You've been off-task for a while"
+        let copy = copyProvider.copy(decision: decision, level: currentLevel)
 
         let intervention = Intervention(
             id:             UUID(),
             ts:             .now,
             level:          currentLevel,
             channel:        channel,
-            title:          title,
-            body:           buildBody(from: decision),
+            title:          copy.title,
+            body:           copy.body,
             actions:        decision.actions,
             sourceDecision: decision
         )
@@ -80,24 +81,6 @@ final class InterventionEngine {
         lastFiredAt = .now
         print("[InterventionEngine] firing intervention: level=\(currentLevel), title=\(intervention.title), channel=\(intervention.channel)")
         interventionBus.publish(intervention)
-    }
-
-    private func buildBody(from decision: EngineDecision) -> String {
-        var parts: [String] = []
-
-        if let task = decision.task, !task.name.isEmpty {
-            parts.append("Task: \(task.name)")
-        }
-
-        if let context = decision.context, let label = context.label, !label.isEmpty {
-            parts.append(label)
-        }
-
-        if let metrics = decision.metrics, metrics.offContextSeconds > 0 {
-            parts.append("\(Int(metrics.offContextSeconds))s off-task")
-        }
-
-        return parts.joined(separator: " · ")
     }
 
     private func resetCycle() {
