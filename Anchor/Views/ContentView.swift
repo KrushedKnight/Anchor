@@ -19,11 +19,13 @@ struct ContentView: View {
 }
 
 struct SessionStartView: View {
-    @State private var taskTitle:   String                  = ""
-    @State private var strictness:  FocusSession.Strictness = .normal
-    @State private var allowedApps: Set<String>             = []
-    @State private var blockedApps: Set<String>             = []
-    @State private var runningApps: [String]                = []
+    @State private var taskTitle:        String                  = ""
+    @State private var strictness:       FocusSession.Strictness = .normal
+    @State private var allowedApps:      Set<String>             = []
+    @State private var blockedApps:      Set<String>             = []
+    @State private var runningApps:      [String]                = []
+    @State private var isClassifying:    Bool                    = false
+    @State private var classifyDebounce: Task<Void, Never>?      = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -46,6 +48,9 @@ struct SessionStartView: View {
                     .background(Color.primary.opacity(0.06))
                     .cornerRadius(8)
                     .onSubmit { tryStart() }
+                    .onChange(of: taskTitle) { _, newValue in
+                        scheduleClassification(for: newValue)
+                    }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -64,7 +69,8 @@ struct SessionStartView: View {
                 title:       "Blocked Apps",
                 apps:        runningApps,
                 selected:    $blockedApps,
-                conflicting: $allowedApps
+                conflicting: $allowedApps,
+                isLoading:   isClassifying
             )
 
             if strictness == .strict {
@@ -72,7 +78,8 @@ struct SessionStartView: View {
                     title:       "Allowed Apps",
                     apps:        runningApps,
                     selected:    $allowedApps,
-                    conflicting: $blockedApps
+                    conflicting: $blockedApps,
+                    isLoading:   isClassifying
                 )
             }
 
@@ -103,6 +110,25 @@ struct SessionStartView: View {
             allowedApps: allowedApps,
             blockedApps: blockedApps
         )
+    }
+
+    private func scheduleClassification(for value: String) {
+        classifyDebounce?.cancel()
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 3, APIKeyStore.shared.isSet(for: .anthropic) else { return }
+        classifyDebounce = Task {
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled else { return }
+            isClassifying = true
+            defer { isClassifying = false }
+            do {
+                let result = try await TaskClassifier.shared.classify(task: trimmed, apps: runningApps)
+                blockedApps = result.offTask
+                if strictness == .strict {
+                    allowedApps = result.onTask
+                }
+            } catch {}
+        }
     }
 }
 
@@ -354,7 +380,9 @@ private struct AppPickerSection: View {
     var apps:        [String]
     @Binding var selected:    Set<String>
     @Binding var conflicting: Set<String>
+    var isLoading:   Bool  = false
     @State private var showPopover = false
+    @State private var pulsing:    Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -362,20 +390,41 @@ private struct AppPickerSection: View {
                 Text(title)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    showPopover = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                        Text(selected.isEmpty ? "Add" : "\(selected.count) selected")
-                    }
-                    .font(.system(.caption2, design: .monospaced))
+                if isLoading {
+                    Text("analyzing…")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .opacity(pulsing ? 0.3 : 1.0)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
-                .popover(isPresented: $showPopover, arrowEdge: .trailing) {
-                    AppListPopover(apps: apps, selected: $selected, conflicting: $conflicting)
+                Spacer()
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 16, height: 16)
+                } else {
+                    Button {
+                        showPopover = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                            Text(selected.isEmpty ? "Add" : "\(selected.count) selected")
+                        }
+                        .font(.system(.caption2, design: .monospaced))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .popover(isPresented: $showPopover, arrowEdge: .trailing) {
+                        AppListPopover(apps: apps, selected: $selected, conflicting: $conflicting)
+                    }
+                }
+            }
+            .onChange(of: isLoading) { _, val in
+                if val {
+                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                        pulsing = true
+                    }
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) { pulsing = false }
                 }
             }
 
@@ -403,6 +452,9 @@ private struct AppPickerSection: View {
                         }
                     }
                 }
+                .opacity(pulsing ? 0.4 : 1.0)
+                .disabled(isLoading)
+                .animation(.easeInOut(duration: 0.3), value: isLoading)
             }
         }
     }
