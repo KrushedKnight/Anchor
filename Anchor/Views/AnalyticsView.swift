@@ -1,0 +1,474 @@
+import SwiftUI
+import Charts
+
+struct AnalyticsView: View {
+    private let profile: UserProfile
+    private let summaries: [SessionSummary]
+
+    init() {
+        self.profile   = UserProfileStore.shared.load()
+        self.summaries = SessionSummaryStore.shared.load()
+    }
+
+    var body: some View {
+        Group {
+            if profile.totalSessions == 0 {
+                emptyState
+            } else {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        headerStats
+                        focusTrendSection
+                        bestHoursSection
+                        sessionHistorySection
+                        driftSourcesSection
+                        workStyleSection
+                        if profile.totalSessions >= 5 {
+                            nudgeEffectivenessSection
+                        }
+                    }
+                    .padding(24)
+                }
+            }
+        }
+        .frame(minWidth: 600, minHeight: 500)
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("No sessions yet")
+                .font(.title2.weight(.medium))
+            Text("Complete a focus session to see your analytics.")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Header Stats
+
+    private var headerStats: some View {
+        HStack(spacing: 16) {
+            StatCard(
+                label: "Sessions",
+                value: "\(profile.totalSessions)",
+                icon: "target"
+            )
+            StatCard(
+                label: "Total Focus Time",
+                value: formatDuration(profile.totalDuration),
+                icon: "clock"
+            )
+            StatCard(
+                label: "Avg Focus Score",
+                value: "\(Int(profile.averageFocusScore * 100))%",
+                icon: "brain.head.profile"
+            )
+            StatCard(
+                label: "Avg Session",
+                value: formatDuration(profile.averageSessionMinutes * 60),
+                icon: "timer"
+            )
+        }
+    }
+
+    // MARK: - Focus Trend
+
+    private var focusTrendSection: some View {
+        AnalyticsCard(title: "Focus Over Time", subtitle: trendLabel) {
+            if profile.recentSessions.count >= 2 {
+                Chart {
+                    ForEach(Array(profile.recentSessions.enumerated()), id: \.offset) { index, session in
+                        LineMark(
+                            x: .value("Session", index + 1),
+                            y: .value("Focus", session.focusScoreAvg * 100)
+                        )
+                        .foregroundStyle(.blue.gradient)
+                        .interpolationMethod(.catmullRom)
+
+                        AreaMark(
+                            x: .value("Session", index + 1),
+                            y: .value("Focus", session.focusScoreAvg * 100)
+                        )
+                        .foregroundStyle(.blue.opacity(0.08))
+                        .interpolationMethod(.catmullRom)
+
+                        PointMark(
+                            x: .value("Session", index + 1),
+                            y: .value("Focus", session.focusScoreAvg * 100)
+                        )
+                        .foregroundStyle(.blue)
+                        .symbolSize(30)
+                    }
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis {
+                    AxisMarks(values: [0, 25, 50, 75, 100]) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let v = value.as(Int.self) { Text("\(v)%") }
+                        }
+                    }
+                }
+                .chartXAxisLabel("Session")
+                .frame(height: 200)
+            } else {
+                Text("Need at least 2 sessions to show a trend.")
+                    .foregroundStyle(.secondary)
+                    .frame(height: 100)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var trendLabel: String {
+        guard let slope = profile.recentTrend else { return "" }
+        if slope > 0.02      { return "Improving" }
+        else if slope < -0.02 { return "Declining" }
+        else                  { return "Steady" }
+    }
+
+    // MARK: - Best Hours
+
+    private var bestHoursSection: some View {
+        AnalyticsCard(title: "Your Best Hours", subtitle: "When you focus best") {
+            let hourData = bestHourData()
+            if hourData.isEmpty {
+                Text("Not enough data yet — keep going.")
+                    .foregroundStyle(.secondary)
+                    .frame(height: 80)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Chart(hourData, id: \.hour) { entry in
+                    BarMark(
+                        x: .value("Score", entry.score * 100),
+                        y: .value("Hour", entry.label)
+                    )
+                    .foregroundStyle(barColor(for: entry.score))
+                    .cornerRadius(4)
+                    .annotation(position: .trailing) {
+                        Text("\(Int(entry.score * 100))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .chartXScale(domain: 0...100)
+                .chartXAxis(.hidden)
+                .frame(height: CGFloat(hourData.count) * 36)
+            }
+        }
+    }
+
+    private struct HourEntry {
+        var hour: Int
+        var label: String
+        var score: Double
+    }
+
+    private func bestHourData() -> [HourEntry] {
+        let minMinutes: Double = 10
+        return (0..<24)
+            .filter { profile.hourlyFocusMinutes[$0] > minMinutes }
+            .map { hour in
+                let avg = profile.hourlyFocusScoreSum[hour] / profile.hourlyFocusMinutes[hour]
+                return HourEntry(hour: hour, label: formatHour(hour), score: avg)
+            }
+            .sorted { $0.score > $1.score }
+            .prefix(5)
+            .reversed()
+            .map { $0 }
+    }
+
+    // MARK: - Session History
+
+    private var sessionHistorySection: some View {
+        AnalyticsCard(title: "Recent Sessions", subtitle: "\(profile.recentSessions.count) sessions") {
+            if profile.recentSessions.isEmpty {
+                Text("No sessions recorded yet.")
+                    .foregroundStyle(.secondary)
+                    .frame(height: 80)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Chart {
+                    ForEach(Array(profile.recentSessions.enumerated()), id: \.offset) { index, session in
+                        BarMark(
+                            x: .value("Session", index + 1),
+                            y: .value("Focus", session.focusScoreAvg * 100)
+                        )
+                        .foregroundStyle(barColor(for: session.focusScoreAvg))
+                        .cornerRadius(3)
+                    }
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis {
+                    AxisMarks(values: [0, 50, 100]) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let v = value.as(Int.self) { Text("\(v)%") }
+                        }
+                    }
+                }
+                .chartXAxisLabel("Session")
+                .frame(height: 160)
+            }
+        }
+    }
+
+    // MARK: - Drift Sources
+
+    private var driftSourcesSection: some View {
+        AnalyticsCard(title: "Where You Drift", subtitle: "Top distractions by time") {
+            let distractions = profile.topDistractions.prefix(5)
+            if distractions.isEmpty {
+                Text("No distractions recorded — nice.")
+                    .foregroundStyle(.secondary)
+                    .frame(height: 80)
+                    .frame(maxWidth: .infinity)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(Array(distractions.enumerated()), id: \.offset) { _, entry in
+                        HStack {
+                            Text(cleanContextLabel(entry.context))
+                                .font(.body)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(formatDuration(entry.seconds))
+                                .font(.body.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Work Style
+
+    private var workStyleSection: some View {
+        AnalyticsCard(title: "How You Work", subtitle: "Time distribution across work states") {
+            let slices = workStateSlices()
+            if slices.isEmpty {
+                Text("No work state data yet.")
+                    .foregroundStyle(.secondary)
+                    .frame(height: 80)
+                    .frame(maxWidth: .infinity)
+            } else {
+                HStack(spacing: 24) {
+                    Chart(slices, id: \.state) { slice in
+                        SectorMark(
+                            angle: .value("Time", slice.fraction),
+                            innerRadius: .ratio(0.55),
+                            angularInset: 1.5
+                        )
+                        .foregroundStyle(slice.color)
+                        .cornerRadius(3)
+                    }
+                    .frame(width: 160, height: 160)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(slices, id: \.state) { slice in
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(slice.color)
+                                    .frame(width: 10, height: 10)
+                                Text(slice.label)
+                                    .font(.callout)
+                                Spacer()
+                                Text("\(Int(slice.fraction * 100))%")
+                                    .font(.callout.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 180)
+            }
+        }
+    }
+
+    private struct WorkStateSlice {
+        var state: String
+        var label: String
+        var fraction: Double
+        var color: Color
+    }
+
+    private func workStateSlices() -> [WorkStateSlice] {
+        let dist = profile.workStateDistribution
+        guard !dist.isEmpty else { return [] }
+
+        return WorkState.allCases.compactMap { ws in
+            let frac = dist[ws.rawValue] ?? 0
+            guard frac > 0.01 else { return nil }
+            return WorkStateSlice(
+                state: ws.rawValue,
+                label: ws.rawValue,
+                fraction: frac,
+                color: ws.stateColor
+            )
+        }
+        .sorted { $0.fraction > $1.fraction }
+    }
+
+    // MARK: - Nudge Effectiveness
+
+    private var nudgeEffectivenessSection: some View {
+        AnalyticsCard(title: "Nudge Effectiveness", subtitle: "How often nudges help you refocus") {
+            HStack(spacing: 32) {
+                if profile.softInterventionsFired > 0 {
+                    NudgeRing(
+                        label: "Soft Nudges",
+                        rate: profile.softRecoveryRate,
+                        count: profile.softInterventionsFired
+                    )
+                }
+                if profile.strongInterventionsFired > 0 {
+                    NudgeRing(
+                        label: "Strong Nudges",
+                        rate: profile.strongRecoveryRate,
+                        count: profile.strongInterventionsFired
+                    )
+                }
+                if profile.softInterventionsFired == 0 && profile.strongInterventionsFired == 0 {
+                    Text("No nudges fired yet.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 120)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m" }
+        return "<1m"
+    }
+
+    private func formatHour(_ hour: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"
+        var comps = DateComponents()
+        comps.hour = hour
+        let date = Calendar.current.date(from: comps) ?? .now
+        return formatter.string(from: date)
+    }
+
+    private func barColor(for score: Double) -> Color {
+        if score >= 0.7 { return .green }
+        if score >= 0.4 { return .yellow }
+        return .red
+    }
+
+    private func cleanContextLabel(_ context: String) -> String {
+        context
+            .replacingOccurrences(of: "domain:", with: "")
+            .replacingOccurrences(of: "app:", with: "")
+    }
+}
+
+// MARK: - WorkState + CaseIterable
+
+extension WorkState: CaseIterable {
+    static var allCases: [WorkState] {
+        [.deepFocus, .productiveSwitching, .stuckCycling, .noveltySeeking, .passiveDrift, .idle]
+    }
+}
+
+// MARK: - Reusable Components
+
+private struct StatCard: View {
+    let label: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.blue)
+            Text(value)
+                .font(.title2.weight(.semibold).monospacedDigit())
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct AnalyticsCard<Content: View>: View {
+    let title: String
+    var subtitle: String = ""
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.headline)
+                if !subtitle.isEmpty {
+                    Spacer()
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            content()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct NudgeRing: View {
+    let label: String
+    let rate: Double
+    let count: Int
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .stroke(.quaternary, lineWidth: 6)
+                Circle()
+                    .trim(from: 0, to: rate)
+                    .stroke(ringColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int(rate * 100))%")
+                    .font(.callout.weight(.semibold).monospacedDigit())
+            }
+            .frame(width: 64, height: 64)
+
+            Text(label)
+                .font(.caption)
+            Text("\(count) sent")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var ringColor: Color {
+        if rate >= 0.6 { return .green }
+        if rate >= 0.3 { return .yellow }
+        return .red
+    }
+}
+
+#Preview("With Data") {
+    AnalyticsView()
+}
