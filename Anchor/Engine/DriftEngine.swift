@@ -13,6 +13,8 @@ final class DriftEngine {
     private var pendingLevel:        RiskLevel    = .stable
     private var pendingTicks:        Int          = 0
     private var lastSessionId:       UUID?
+    private var currentWorkState:    WorkState    = .idle
+    private var workStateEnteredAt:  Date         = .now
 
     private let bus:                     DecisionBus?
     private let analyzer:                BehaviorAnalyzer
@@ -44,6 +46,7 @@ final class DriftEngine {
         computeContextFit()
         decayAccumulator()
         updateFocusScore(snap)
+        updateWorkState(snap)
 
         state.totalOffTaskDwell  = liveOffTaskDwell(snap)
         state.accumulatorSeconds = offTaskAccumulator
@@ -52,7 +55,7 @@ final class DriftEngine {
 
         accumulator.record(state: state, interval: config.evaluationInterval)
 
-        print("[DriftEngine] score=\(String(format: "%.2f", focusScore)) risk=\(state.riskLevel) pressure=\(state.dominantPressureSource)")
+        print("[DriftEngine] score=\(String(format: "%.2f", focusScore)) risk=\(state.riskLevel) state=\(state.workState.rawValue) (\(Int(state.workStateDuration))s) pressure=\(state.dominantPressureSource)")
         maybePublish(snap)
     }
 
@@ -77,6 +80,8 @@ final class DriftEngine {
             focusScore         = 1.0
             pendingLevel       = .stable
             pendingTicks       = 0
+            currentWorkState   = .idle
+            workStateEnteredAt = .now
             lastSessionId      = currentSessionId
             accumulator.reset()
         }
@@ -125,6 +130,61 @@ final class DriftEngine {
     private func decayAccumulator() {
         guard !state.isIdle && state.contextFit > 0.5 && offTaskAccumulator > 0 else { return }
         offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * state.contextFit * config.evaluationInterval)
+    }
+
+    private func updateWorkState(_ snap: BehaviorSnapshot) {
+        let inferred = inferWorkState(from: snap, contextFit: state.contextFit)
+
+        if inferred != currentWorkState {
+            currentWorkState   = inferred
+            workStateEnteredAt = .now
+        }
+
+        state.workState         = currentWorkState
+        state.workStateDuration = Date.now.timeIntervalSince(workStateEnteredAt)
+    }
+
+    private func inferWorkState(from snap: BehaviorSnapshot, contextFit: Double) -> WorkState {
+        if snap.isIdle { return .idle }
+
+        let highDwell    = snap.dwellInCurrentContext > 60
+        let lowSwitching = snap.switchesPerMinute < 3
+        let onTask       = contextFit > 0.7
+        let offTask      = contextFit < 0.3
+
+        let highScatter  = snap.distinctApps5m >= config.scatterAppsThreshold + 2
+        let shortDwells  = averageDwell(snap) < config.dwellSkimmingThreshold
+
+        if highDwell && lowSwitching && onTask {
+            return .deepFocus
+        }
+
+        if highDwell && lowSwitching && offTask {
+            return .passiveDrift
+        }
+
+        if snap.isBouncing {
+            return .stuckCycling
+        }
+
+        if highScatter && shortDwells {
+            return .noveltySeeking
+        }
+
+        if onTask {
+            return .productiveSwitching
+        }
+
+        if offTask {
+            return shortDwells ? .noveltySeeking : .passiveDrift
+        }
+
+        return .productiveSwitching
+    }
+
+    private func averageDwell(_ snap: BehaviorSnapshot) -> TimeInterval {
+        guard !snap.recentAppDwells.isEmpty else { return snap.dwellInCurrentContext }
+        return snap.recentAppDwells.map(\.duration).reduce(0, +) / Double(snap.recentAppDwells.count)
     }
 
     private func updateFocusScore(_ snap: BehaviorSnapshot) {

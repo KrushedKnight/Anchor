@@ -33,4 +33,6 @@ struct EngineState {
     var accumulatorSeconds:     TimeInterval    = 0
     var dominantPressureSource: PressureSource  = .none
     var pressures:              PressureBreakdown = .init()
+    var workState:              WorkState       = .idle
+    var workStateDuration:      TimeInterval    = 0
 }

@@ -214,6 +214,18 @@ private struct DebugPanel: View {
                     .foregroundStyle(state.riskLevel.debugColor)
             }
 
+            HStack(spacing: 4) {
+                Text("State")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text("\(state.workState.symbol) \(state.workState.rawValue)")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(state.workState.stateColor)
+                Text(formatSec(state.workStateDuration))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("SCORE")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
