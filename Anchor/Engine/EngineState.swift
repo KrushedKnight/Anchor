@@ -26,7 +26,8 @@ struct EngineState {
     var lastEvaluatedAt:        Date            = .distantPast
     var sessionActive:          Bool            = false
     var sessionTaskTitle:       String          = ""
-    var isOffTaskContext:       Bool            = false
+    var contextFit:             Double          = 1.0
+    var isOffTaskContext:       Bool            { contextFit < 0.5 }
     var focusScore:             Double          = 1.0
     var focusStreakSeconds:     TimeInterval    = 0
     var accumulatorSeconds:     TimeInterval    = 0

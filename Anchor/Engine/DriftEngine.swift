@@ -41,7 +41,7 @@ final class DriftEngine {
         let snap = analyzer.snapshot
 
         syncState(from: snap)
-        classifyOffTask()
+        computeContextFit()
         decayAccumulator()
         updateFocusScore(snap)
 
@@ -58,8 +58,9 @@ final class DriftEngine {
 
     private func syncState(from snap: BehaviorSnapshot) {
         if snap.currentApp != state.currentApp || snap.currentDomain != state.currentDomain {
-            if state.isOffTaskContext {
-                offTaskAccumulator += state.dwellInCurrentContext
+            let offTaskWeight = 1.0 - state.contextFit
+            if offTaskWeight > 0 {
+                offTaskAccumulator += state.dwellInCurrentContext * offTaskWeight
             }
         }
         state.currentApp            = snap.currentApp
@@ -69,7 +70,7 @@ final class DriftEngine {
         state.dwellInCurrentContext = snap.dwellInCurrentContext
     }
 
-    private func classifyOffTask() {
+    private func computeContextFit() {
         let currentSessionId = SessionManager.shared.activeSession?.id
         if currentSessionId != lastSessionId {
             offTaskAccumulator = 0
@@ -83,31 +84,47 @@ final class DriftEngine {
         guard let session = SessionManager.shared.activeSession else {
             state.sessionActive    = false
             state.sessionTaskTitle = ""
-            state.isOffTaskContext = false
+            state.contextFit       = 1.0
             return
         }
 
         state.sessionActive    = true
         state.sessionTaskTitle = session.taskTitle
 
-        let app = state.currentApp
+        let app    = state.currentApp
+        let domain = state.currentDomain
 
-        if session.blockedApps.contains(app) {
-            state.isOffTaskContext = true
+        if session.blockedApps.contains(app) || session.blockedDomains.contains(domain) {
+            state.contextFit = 0.1
+            return
+        }
+
+        if !domain.isEmpty && config.distractingDomains.contains(domain) {
+            state.contextFit = 0.15
+            return
+        }
+
+        if session.allowedApps.contains(app) || (!domain.isEmpty && session.allowedDomains.contains(domain)) {
+            state.contextFit = 1.0
+            return
+        }
+
+        if session.ambiguousApps.contains(app) || (!domain.isEmpty && config.ambiguousDomains.contains(domain)) {
+            state.contextFit = 0.55
             return
         }
 
         switch session.strictness {
         case .normal:
-            state.isOffTaskContext = false
+            state.contextFit = 0.75
         case .strict:
-            state.isOffTaskContext = !session.allowedApps.isEmpty && !session.allowedApps.contains(app)
+            state.contextFit = !session.allowedApps.isEmpty ? 0.25 : 0.75
         }
     }
 
     private func decayAccumulator() {
-        guard !state.isIdle && !state.isOffTaskContext && offTaskAccumulator > 0 else { return }
-        offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * config.evaluationInterval)
+        guard !state.isIdle && state.contextFit > 0.5 && offTaskAccumulator > 0 else { return }
+        offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * state.contextFit * config.evaluationInterval)
     }
 
     private func updateFocusScore(_ snap: BehaviorSnapshot) {
@@ -136,7 +153,7 @@ final class DriftEngine {
     }
 
     private func computeTargetScore(_ snap: BehaviorSnapshot) -> (Double, PressureSource) {
-        let offTaskPressure: Double = state.isOffTaskContext ? 0.8 : 0.0
+        let offTaskPressure: Double = (1.0 - state.contextFit) * config.offTaskPressureScale
 
         let scatterRaw = Double(max(0, snap.distinctApps5m - config.scatterAppsThreshold)) / 4.0
         var scatterPressure = min(scatterRaw, 1.0) * 0.35

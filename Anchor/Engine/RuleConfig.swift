@@ -3,6 +3,8 @@ import Foundation
 struct RuleConfig {
     var knownBrowsers:              Set<String>
     var distractingDomains:         Set<String>
+    var ambiguousDomains:           Set<String>     // plausibly work-related, gets partial pressure
+    var offTaskPressureScale:       Double          // max multiplier for off-task pressure (replaces hardcoded 0.8)
     var totalOffTaskDwellThreshold: TimeInterval    // accumulator ceiling for pressure scaling
     var evaluationInterval:         TimeInterval    // engine tick rate
 
@@ -25,6 +27,12 @@ struct RuleConfig {
             "instagram.com", "tiktok.com", "twitch.tv", "facebook.com",
             "netflix.com", "hulu.com"
         ],
+        ambiguousDomains: [
+            "github.com", "stackoverflow.com", "docs.swift.org",
+            "developer.apple.com", "google.com", "notion.so", "linear.app",
+            "chat.openai.com", "claude.ai", "docs.google.com"
+        ],
+        offTaskPressureScale: 0.65,
         totalOffTaskDwellThreshold: 180,
         evaluationInterval:         2,
         scatterAppsThreshold:       3,

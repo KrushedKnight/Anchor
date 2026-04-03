@@ -22,6 +22,7 @@ struct SessionStartView: View {
     @State private var taskTitle:        String                  = ""
     @State private var strictness:       FocusSession.Strictness = .normal
     @State private var allowedApps:      Set<String>             = []
+    @State private var ambiguousApps:    Set<String>             = []
     @State private var blockedApps:      Set<String>             = []
     @State private var runningApps:      [String]                = []
     @State private var isClassifying:    Bool                    = false
@@ -105,10 +106,11 @@ struct SessionStartView: View {
     private func tryStart() {
         guard !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         SessionManager.shared.start(
-            taskTitle:   taskTitle,
-            strictness:  strictness,
-            allowedApps: allowedApps,
-            blockedApps: blockedApps
+            taskTitle:    taskTitle,
+            strictness:   strictness,
+            allowedApps:  allowedApps,
+            ambiguousApps: ambiguousApps,
+            blockedApps:  blockedApps
         )
     }
 
@@ -124,7 +126,8 @@ struct SessionStartView: View {
             defer { isClassifying = false }
             do {
                 let result = try await TaskClassifier.shared.classify(task: trimmed, apps: runningApps)
-                blockedApps = result.offTask
+                blockedApps   = result.offTask
+                ambiguousApps = result.ambiguous
                 if strictness == .strict {
                     allowedApps = result.onTask
                 }

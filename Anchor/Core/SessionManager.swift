@@ -16,6 +16,7 @@ final class SessionManager {
         taskTitle:      String,
         strictness:     FocusSession.Strictness,
         allowedApps:    Set<String> = [],
+        ambiguousApps:  Set<String> = [],
         blockedApps:    Set<String> = [],
         allowedDomains: Set<String> = [],
         blockedDomains: Set<String> = []
@@ -24,6 +25,7 @@ final class SessionManager {
             taskTitle:      taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
             strictness:     strictness,
             allowedApps:    allowedApps,
+            ambiguousApps:  ambiguousApps,
             blockedApps:    blockedApps,
             allowedDomains: allowedDomains,
             blockedDomains: blockedDomains

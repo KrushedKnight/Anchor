@@ -1,8 +1,9 @@
 import Foundation
 
 struct AppClassification {
-    var onTask:  Set<String>
-    var offTask: Set<String>
+    var onTask:    Set<String>
+    var ambiguous: Set<String>
+    var offTask:   Set<String>
 }
 
 final class TaskClassifier {
@@ -11,7 +12,7 @@ final class TaskClassifier {
 
     func classify(task: String, apps: [String]) async throws -> AppClassification {
         guard !task.isEmpty, !apps.isEmpty else {
-            return AppClassification(onTask: [], offTask: [])
+            return AppClassification(onTask: [], ambiguous: [], offTask: [])
         }
 
         switch APIKeyStore.shared.activeProvider {
@@ -33,8 +34,11 @@ final class TaskClassifier {
         req.setValue("application/json", forHTTPHeaderField: "content-type")
 
         let system = """
-        You classify macOS apps as on-task or off-task for a focus session. \
-        Return only valid JSON: {"on_task": [...], "off_task": [...]}. \
+        You classify macOS apps for a focus session into three groups. \
+        Return only valid JSON: {"on_task": [...], "ambiguous": [...], "off_task": [...]}. \
+        on_task = core tools for this task. \
+        ambiguous = plausibly useful (browser, Slack, Finder, Terminal, docs, GitHub, search). \
+        off_task = clear distractors (social, entertainment, games, shopping). \
         Only include app names from the provided list. No other text.
         """
         let prompt = "Task: \(task)\nApps: \(apps.joined(separator: ", "))"
@@ -67,8 +71,11 @@ final class TaskClassifier {
         req.setValue("application/json", forHTTPHeaderField: "content-type")
 
         let system = """
-        You classify macOS apps as on-task or off-task for a focus session. \
-        Return only valid JSON: {"on_task": [...], "off_task": [...]}. \
+        You classify macOS apps for a focus session into three groups. \
+        Return only valid JSON: {"on_task": [...], "ambiguous": [...], "off_task": [...]}. \
+        on_task = core tools for this task. \
+        ambiguous = plausibly useful (browser, Slack, Finder, Terminal, docs, GitHub, search). \
+        off_task = clear distractors (social, entertainment, games, shopping). \
         Only include app names from the provided list. No other text.
         """
         let prompt = "Task: \(task)\nApps: \(apps.joined(separator: ", "))"
@@ -106,8 +113,11 @@ final class TaskClassifier {
         req.setValue("application/json", forHTTPHeaderField: "content-type")
 
         let system = """
-        You classify macOS apps as on-task or off-task for a focus session. \
-        Return only valid JSON: {"on_task": [...], "off_task": [...]}. \
+        You classify macOS apps for a focus session into three groups. \
+        Return only valid JSON: {"on_task": [...], "ambiguous": [...], "off_task": [...]}. \
+        on_task = core tools for this task. \
+        ambiguous = plausibly useful (browser, Slack, Finder, Terminal, docs, GitHub, search). \
+        off_task = clear distractors (social, entertainment, games, shopping). \
         Only include app names from the provided list. No other text.
         """
         let prompt = "Task: \(task)\nApps: \(apps.joined(separator: ", "))"
@@ -142,8 +152,9 @@ final class TaskClassifier {
         else { throw ClassifierError.parseError }
 
         return AppClassification(
-            onTask:  Set(json["on_task"]  ?? []).intersection(known),
-            offTask: Set(json["off_task"] ?? []).intersection(known)
+            onTask:    Set(json["on_task"]    ?? []).intersection(known),
+            ambiguous: Set(json["ambiguous"]  ?? []).intersection(known),
+            offTask:   Set(json["off_task"]   ?? []).intersection(known)
         )
     }
 }

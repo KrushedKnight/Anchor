@@ -11,6 +11,7 @@ struct FocusSession {
     var taskTitle:      String
     var strictness:     Strictness
     var allowedApps:    Set<String>  = []
+    var ambiguousApps:  Set<String>  = []
     var blockedApps:    Set<String>  = []
     var allowedDomains: Set<String>  = []
     var blockedDomains: Set<String>  = []
