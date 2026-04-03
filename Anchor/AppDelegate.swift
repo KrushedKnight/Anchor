@@ -15,9 +15,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         appObserver.start()
-        idleMonitor.start()
-        chromeMonitor.start()
-        windowTitleObserver.start()
+        if UserDefaults.standard.object(forKey: "observer.idle") as? Bool ?? true {
+            idleMonitor.start()
+        }
+        if UserDefaults.standard.object(forKey: "observer.chrome") as? Bool ?? true {
+            chromeMonitor.start()
+        }
+        if UserDefaults.standard.object(forKey: "observer.windowTitle") as? Bool ?? true {
+            windowTitleObserver.start()
+        }
         heartbeatMonitor.start()
         interventionRecorder.start()
         DriftEngine.shared.start()

@@ -1,41 +1,97 @@
 import SwiftUI
+import Charts
 import AppKit
+
+// MARK: - Content View
 
 struct ContentView: View {
     var sessionManager = SessionManager.shared
 
     var body: some View {
         Group {
-            if sessionManager.isActive {
-                SessionActiveView()
-            } else if let summary = sessionManager.lastSummary {
+            if let summary = sessionManager.lastSummary {
                 SessionSummaryView(summary: summary)
+            } else if sessionManager.isActive {
+                ActiveSessionCompactView()
             } else {
-                SessionStartView()
+                TabRootView()
             }
         }
+        .frame(width: 300)
         .background(VisualEffect().ignoresSafeArea())
+        .onChange(of: sessionManager.isActive) { _, active in
+            if active {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    findMainWindow()?.miniaturize(nil)
+                }
+            }
+        }
+        .onChange(of: sessionManager.lastSummary?.id) { _, id in
+            if id != nil {
+                findMainWindow()?.deminiaturize(nil)
+            }
+        }
+    }
+
+    private func findMainWindow() -> NSWindow? {
+        NSApp.windows.first { !($0 is NSPanel) }
     }
 }
 
-struct SessionStartView: View {
-    @State private var taskTitle:           String                         = ""
-    @State private var classifications:     [String: ContextFitLevel]      = [:]
-    @State private var runningApps:         [String]                       = []
-    @State private var isClassifying:       Bool                           = false
-    @State private var classifyDebounce:    Task<Void, Never>?             = nil
+// MARK: - Tab Root
+
+private enum AppTab: String, CaseIterable {
+    case home      = "Home"
+    case analytics = "Analytics"
+    case settings  = "Settings"
+
+    var icon: String {
+        switch self {
+        case .home:      "house"
+        case .analytics: "chart.bar"
+        case .settings:  "gear"
+        }
+    }
+}
+
+private struct TabRootView: View {
+    @State private var selectedTab: AppTab = .home
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Anchor")
-                    .font(.system(.title2, design: .monospaced).weight(.heavy))
-                Text("Focus tracker")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            Picker("", selection: $selectedTab) {
+                ForEach(AppTab.allCases, id: \.self) { tab in
+                    Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                }
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
-            VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            switch selectedTab {
+            case .home:      HomeTab()
+            case .analytics: CompactAnalyticsTab()
+            case .settings:  SettingsTab()
+            }
+        }
+    }
+}
+
+// MARK: - Home Tab
+
+private struct HomeTab: View {
+    @State private var taskTitle         = ""
+    @State private var classifications:  [String: ContextFitLevel] = [:]
+    @State private var runningApps:      [String]                  = []
+    @State private var isClassifying     = false
+    @State private var classifyDebounce: Task<Void, Never>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("What are you working on?")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
@@ -45,7 +101,7 @@ struct SessionStartView: View {
                     .padding(10)
                     .background(Color.primary.opacity(0.06))
                     .cornerRadius(8)
-                    .onSubmit { tryStart() }
+                    .onSubmit { startSession() }
                     .onChange(of: taskTitle) { _, newValue in
                         scheduleClassification(for: newValue)
                     }
@@ -55,13 +111,29 @@ struct SessionStartView: View {
                 ClassificationPreview(classifications: classifications, isLoading: isClassifying)
             }
 
-            Button("Start Session") { tryStart() }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Start Session") { startSession() }
+                .buttonStyle(AnchorPrimaryButtonStyle())
+
+            recentSessionsList
         }
-        .padding(28)
-        .frame(width: 320)
+        .padding(20)
         .onAppear { refreshApps() }
+    }
+
+    @ViewBuilder
+    private var recentSessionsList: some View {
+        let sessions = Array(SessionSummaryStore.shared.load().prefix(5))
+        if !sessions.isEmpty {
+            Divider()
+            Text("RECENT")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ForEach(sessions) { session in
+                    RecentSessionRow(session: session)
+                }
+            }
+        }
     }
 
     private func refreshApps() {
@@ -74,10 +146,9 @@ struct SessionStartView: View {
             .sorted()
     }
 
-    private func tryStart() {
-        guard !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    private func startSession() {
         SessionManager.shared.start(
-            taskTitle:          taskTitle,
+            taskTitle:          taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
             appClassifications: classifications
         )
     }
@@ -104,134 +175,397 @@ struct SessionStartView: View {
     }
 }
 
-private struct ClassificationPreview: View {
-    var classifications: [String: ContextFitLevel]
-    var isLoading: Bool
+// MARK: - Recent Session Row
 
-    private var onTask:    [String] { classifications.filter { $0.value == .onTask }.keys.sorted() }
-    private var ambiguous: [String] { classifications.filter { $0.value == .ambiguous }.keys.sorted() }
-    private var offTask:   [String] { classifications.filter { $0.value == .offTask }.keys.sorted() }
+private struct RecentSessionRow: View {
+    var session: SessionSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Text("App Classification")
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(session.startedAt, style: .relative)
+                    Text("·")
+                    Text(formatDuration(session.duration))
+                }
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(String(format: "%.0f%%", session.focusScoreAvg * 100))
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(scoreColor(for: session.focusScoreAvg))
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+// MARK: - Compact Analytics Tab
+
+private struct CompactAnalyticsTab: View {
+    private let profile: UserProfile
+    private let summaries: [SessionSummary]
+
+    init() {
+        self.profile   = UserProfileStore.shared.load()
+        self.summaries = SessionSummaryStore.shared.load()
+    }
+
+    var body: some View {
+        if profile.totalSessions == 0 {
+            VStack(spacing: 8) {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("Complete a session to see analytics")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 12, height: 12)
+            }
+            .frame(maxWidth: .infinity, minHeight: 200)
+            .padding(20)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    weeklyChartSection
+                    insightsSection
                 }
-            }
-
-            if !onTask.isEmpty {
-                ClassificationRow(label: "on-task", apps: onTask, color: .green)
-            }
-            if !ambiguous.isEmpty {
-                ClassificationRow(label: "neutral", apps: ambiguous, color: .yellow)
-            }
-            if !offTask.isEmpty {
-                ClassificationRow(label: "distractor", apps: offTask, color: .red)
+                .padding(20)
             }
         }
     }
+
+    private var weeklyChartSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("THIS WEEK")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+
+            let data = weekData()
+            if data.allSatisfy({ $0.totalMinutes == 0 }) {
+                Text("No sessions this week")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(height: 100)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Chart(data) { day in
+                    BarMark(
+                        x: .value("Day", day.label),
+                        y: .value("Minutes", day.totalMinutes)
+                    )
+                    .foregroundStyle(barColor(for: day.avgScore))
+                    .cornerRadius(3)
+                }
+                .chartYAxisLabel("min")
+                .frame(height: 120)
+            }
+        }
+    }
+
+    private var insightsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("INSIGHTS")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+
+            ForEach(Array(generateInsights().enumerated()), id: \.offset) { _, insight in
+                Text(insight)
+                    .font(.system(size: 11, design: .monospaced))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private struct DayFocus: Identifiable {
+        let id: Date
+        let label: String
+        let totalMinutes: Double
+        let avgScore: Double
+    }
+
+    private func weekData() -> [DayFocus] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+
+        return (0..<7).reversed().map { offset in
+            let day = calendar.date(byAdding: .day, value: -offset, to: today)!
+            let next = calendar.date(byAdding: .day, value: 1, to: day)!
+            let daySummaries = summaries.filter { $0.startedAt >= day && $0.startedAt < next }
+            let totalMins = daySummaries.reduce(0.0) { $0 + $1.duration } / 60
+            let avgScore = daySummaries.isEmpty
+                ? 0
+                : daySummaries.reduce(0.0) { $0 + $1.focusScoreAvg } / Double(daySummaries.count)
+
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEE"
+
+            return DayFocus(id: day, label: formatter.string(from: day), totalMinutes: totalMins, avgScore: avgScore)
+        }
+    }
+
+    private func generateInsights() -> [String] {
+        var insights: [String] = []
+
+        let bestHours = profile.bestFocusHours(top: 1)
+        if let hour = bestHours.first {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h a"
+            var comps = DateComponents()
+            comps.hour = hour
+            if let date = Calendar.current.date(from: comps) {
+                insights.append("You focus best around \(formatter.string(from: date)).")
+            }
+        }
+
+        if let top = profile.topDistractions.first {
+            let name = top.context
+                .replacingOccurrences(of: "domain:", with: "")
+                .replacingOccurrences(of: "app:", with: "")
+            insights.append("\(name) is your biggest distractor (\(formatInsightDuration(top.seconds)) total).")
+        }
+
+        if profile.softInterventionsFired >= 5 {
+            let pct = Int(profile.softRecoveryRate * 100)
+            insights.append("Soft nudges help you refocus \(pct)% of the time.")
+        }
+
+        if let slope = profile.recentTrend {
+            if slope > 0.02 {
+                insights.append("Your focus is trending upward.")
+            } else if slope < -0.02 {
+                insights.append("Your focus has been declining — shorter sessions might help.")
+            } else {
+                insights.append("Your focus has been steady across recent sessions.")
+            }
+        }
+
+        if insights.isEmpty {
+            insights.append("Keep completing sessions to unlock insights.")
+        }
+
+        return insights
+    }
+
+    private func barColor(for score: Double) -> Color {
+        if score >= 0.7 { return .green }
+        if score >= 0.4 { return .yellow }
+        return .red
+    }
+
+    private func formatInsightDuration(_ seconds: Double) -> String {
+        let total = Int(seconds)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m" }
+        return "<1m"
+    }
 }
 
-private struct ClassificationRow: View {
-    var label: String
-    var apps:  [String]
-    var color: Color
+// MARK: - Settings Tab
+
+private struct SettingsTab: View {
+    @State private var showDebug          = false
+    @State private var chromeEnabled      = UserDefaults.standard.object(forKey: "observer.chrome") as? Bool ?? true
+    @State private var idleEnabled        = UserDefaults.standard.object(forKey: "observer.idle") as? Bool ?? true
+    @State private var windowTitleEnabled = UserDefaults.standard.object(forKey: "observer.windowTitle") as? Bool ?? true
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
-                .padding(.top, 4)
-            Text("\(label): \(apps.joined(separator: ", "))")
-                .font(.system(size: 10, design: .monospaced))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ProviderSettingsSection()
+
+                Divider()
+
+                observersSection
+
+                Divider()
+
+                debugSection
+            }
+            .padding(20)
+        }
+        .sheet(isPresented: $showDebug) {
+            DebugSheet()
+        }
+    }
+
+    private var observersSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("OBSERVERS")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
+
+            ObserverToggle(label: "App Tracking", enabled: .constant(true), locked: true)
+
+            ObserverToggle(label: "Chrome Tabs", enabled: $chromeEnabled)
+                .onChange(of: chromeEnabled) { _, on in
+                    UserDefaults.standard.set(on, forKey: "observer.chrome")
+                    let d = NSApp.delegate as? AppDelegate
+                    d?.chromeMonitor.stop()
+                    if on { d?.chromeMonitor.start() }
+                }
+
+            ObserverToggle(label: "Idle Detection", enabled: $idleEnabled)
+                .onChange(of: idleEnabled) { _, on in
+                    UserDefaults.standard.set(on, forKey: "observer.idle")
+                    let d = NSApp.delegate as? AppDelegate
+                    d?.idleMonitor.stop()
+                    if on { d?.idleMonitor.start() }
+                }
+
+            ObserverToggle(label: "Window Titles", enabled: $windowTitleEnabled)
+                .onChange(of: windowTitleEnabled) { _, on in
+                    UserDefaults.standard.set(on, forKey: "observer.windowTitle")
+                    let d = NSApp.delegate as? AppDelegate
+                    d?.windowTitleObserver.stop()
+                    if on { d?.windowTitleObserver.start() }
+                }
+        }
+    }
+
+    private var debugSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("DEBUG")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+
+            Button("Open Debug Panel") { showDebug = true }
+                .font(.system(size: 11, design: .monospaced))
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
         }
     }
 }
 
-struct SessionActiveView: View {
+private struct ObserverToggle: View {
+    var label: String
+    @Binding var enabled: Bool
+    var locked: Bool = false
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11, design: .monospaced))
+            Spacer()
+            if locked {
+                Text("always on")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            } else {
+                Toggle("", isOn: $enabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+            }
+        }
+    }
+}
+
+// MARK: - Active Session (compact)
+
+private struct ActiveSessionCompactView: View {
     var sessionManager = SessionManager.shared
     var engine         = DriftEngine.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Anchor")
-                    .font(.system(.title2, design: .monospaced).weight(.heavy))
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 7, height: 7)
-                    Text("Session active")
-                        .font(.system(.caption, design: .monospaced))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Circle().fill(.green).frame(width: 7, height: 7)
+                        Text("Session active")
+                            .font(.system(.caption, design: .monospaced).weight(.semibold))
+                    }
+                    if let session = sessionManager.activeSession {
+                        Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 6) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.primary.opacity(0.08))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(engine.state.riskLevel.color)
+                            .frame(width: geo.size.width * engine.state.focusScore)
+                    }
+                }
+                .frame(height: 6)
+                Text(String(format: "%.0f%%", engine.state.focusScore * 100))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(engine.state.riskLevel.color)
+                    .frame(width: 34, alignment: .trailing)
+            }
+
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(engine.state.workState.rawValue)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(engine.state.workState.stateColor)
+                    Text("state")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(engine.state.riskLevel.label)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(engine.state.riskLevel.color)
+                    Text("risk")
+                        .font(.system(size: 8, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if let session = sessionManager.activeSession {
-                VStack(alignment: .leading, spacing: 10) {
-                    SessionRow(label: "Task",    value: session.taskTitle.isEmpty ? "—" : session.taskTitle)
-                    SessionRow(label: "Started", value: session.startedAt.formatted(date: .omitted, time: .shortened))
-                    SessionRow(
-                        label:      "Context",
-                        value:      contextLabel,
-                        valueColor: contextColor
-                    )
-                }
-            }
-
-            DebugPanel(state: engine.state, snap: BehaviorAnalyzer.shared.snapshot)
-
             Button("End Session") { SessionManager.shared.end() }
-                .buttonStyle(DestructiveButtonStyle())
+                .buttonStyle(AnchorDestructiveButtonStyle())
         }
-        .padding(28)
-        .frame(width: 320)
-    }
-
-    private var contextLabel: String {
-        let fit = engine.state.contextFit
-        if fit >= 0.8 { return "ON TASK" }
-        if fit >= 0.4 { return "NEUTRAL" }
-        return "OFF TASK"
-    }
-
-    private var contextColor: Color {
-        let fit = engine.state.contextFit
-        if fit >= 0.8 { return .green }
-        if fit >= 0.4 { return .yellow }
-        return .orange
+        .padding(20)
     }
 }
 
-private extension RiskLevel {
-    var debugLabel: String {
-        switch self { case .stable: "STABLE"; case .atRisk: "AT RISK"; case .drift: "DRIFT" }
-    }
-    var debugColor: Color {
-        switch self { case .stable: .green; case .atRisk: .orange; case .drift: .red }
+// MARK: - Debug Sheet
+
+private struct DebugSheet: View {
+    var engine = DriftEngine.shared
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Debug Panel")
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+                Spacer()
+                Button("Done") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .padding(16)
+
+            Divider()
+
+            ScrollView {
+                DebugPanelContent(state: engine.state, snap: BehaviorAnalyzer.shared.snapshot)
+                    .padding(16)
+            }
+        }
+        .frame(width: 320, height: 500)
     }
 }
 
-private struct DebugPanel: View {
+private struct DebugPanelContent: View {
     var state: EngineState
     var snap:  BehaviorSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Divider()
-            Text("DEBUG")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.orange)
-
             HStack(spacing: 4) {
                 Text("State")
                     .font(.system(.caption2, design: .monospaced))
@@ -248,9 +582,9 @@ private struct DebugPanel: View {
                 Text("Risk")
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
-                Text(state.riskLevel.debugLabel)
+                Text(state.riskLevel.label)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(state.riskLevel.debugColor)
+                    .foregroundStyle(state.riskLevel.color)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -264,19 +598,19 @@ private struct DebugPanel: View {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(Color.primary.opacity(0.08))
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(scoreColor)
+                                .fill(state.riskLevel.color)
                                 .frame(width: geo.size.width * state.focusScore)
                         }
                     }
                     .frame(height: 6)
                     Text(String(format: "%.0f%%", state.focusScore * 100))
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(scoreColor)
+                        .foregroundStyle(state.riskLevel.color)
                         .frame(width: 30, alignment: .trailing)
                 }
-                DebugMetric(label: "quality", value: String(format: "%.0f%%", state.focusQuality * 100))
-                DebugMetric(label: "base",  value: String(format: "%.0f%%", state.workState.baseTargetScore * 100))
-                DebugMetric(label: "floor", value: String(format: "%.0f%%", state.workState.decayFloor * 100))
+                DebugMetric(label: "quality",     value: String(format: "%.0f%%", state.focusQuality * 100))
+                DebugMetric(label: "base",        value: String(format: "%.0f%%", state.workState.baseTargetScore * 100))
+                DebugMetric(label: "floor",       value: String(format: "%.0f%%", state.workState.decayFloor * 100))
                 DebugMetric(label: "accumulator", value: formatSec(state.accumulatorSeconds))
             }
 
@@ -311,16 +645,6 @@ private struct DebugPanel: View {
                     }
                 }
             }
-
-            ProviderSettingsSection()
-        }
-    }
-
-    private var scoreColor: Color {
-        switch state.riskLevel {
-        case .stable: .green
-        case .atRisk: .orange
-        case .drift:  .red
         }
     }
 
@@ -329,91 +653,70 @@ private struct DebugPanel: View {
     }
 }
 
-private struct DebugRule: View {
-    var label:  String
-    var firing: Bool
+// MARK: - Classification Preview
+
+private struct ClassificationPreview: View {
+    var classifications: [String: ContextFitLevel]
+    var isLoading: Bool
+
+    private var onTask:    [String] { classifications.filter { $0.value == .onTask }.keys.sorted() }
+    private var ambiguous: [String] { classifications.filter { $0.value == .ambiguous }.keys.sorted() }
+    private var offTask:   [String] { classifications.filter { $0.value == .offTask }.keys.sorted() }
+
     var body: some View {
-        HStack(spacing: 5) {
-            Text(firing ? "●" : "○")
-                .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(firing ? Color.red : Color.secondary.opacity(0.5))
-            Text(label)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(firing ? Color.primary : Color.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text("App Classification")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 12, height: 12)
+                }
+            }
+            if !onTask.isEmpty {
+                ClassificationRow(label: "on-task", apps: onTask, color: .green)
+            }
+            if !ambiguous.isEmpty {
+                ClassificationRow(label: "neutral", apps: ambiguous, color: .yellow)
+            }
+            if !offTask.isEmpty {
+                ClassificationRow(label: "distractor", apps: offTask, color: .red)
+            }
         }
     }
 }
 
-
-private struct DebugMetric: View {
+private struct ClassificationRow: View {
     var label: String
-    var value: String
+    var apps:  [String]
+    var color: Color
+
     var body: some View {
-        HStack(alignment: .top) {
-            Text(label)
+        HStack(alignment: .top, spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .padding(.top, 4)
+            Text("\(label): \(apps.joined(separator: ", "))")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 88, alignment: .leading)
-            Text(value)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.primary)
+                .lineLimit(2)
         }
     }
 }
 
-private struct SessionRow: View {
-    var label:      String
-    var value:      String
-    var valueColor: Color = .primary
-
-    var body: some View {
-        HStack(alignment: .top) {
-            Text(label)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
-            Text(value)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(valueColor)
-        }
-    }
-}
-
-private struct PrimaryButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.body, design: .monospaced).weight(.medium))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Color.accentColor.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.3))
-            .foregroundStyle(.white)
-            .cornerRadius(8)
-    }
-}
-
-private struct DestructiveButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.body, design: .monospaced).weight(.medium))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Color.red.opacity(configuration.isPressed ? 0.65 : 0.8))
-            .foregroundStyle(.white)
-            .cornerRadius(8)
-    }
-}
+// MARK: - Provider Settings
 
 private struct ProviderSettingsSection: View {
     var store = APIKeyStore.shared
-    @State private var keyInput:      String = ""
+    @State private var keyInput:       String = ""
     @State private var ollamaEndpoint: String = ""
     @State private var ollamaModel:    String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Divider()
             Text("AI PROVIDER")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -506,23 +809,33 @@ private struct OllamaConfigFields: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            DebugMetric(label: "endpoint", value: "")
-            TextField("http://localhost:11434", text: $endpoint)
-                .textFieldStyle(.plain)
-                .font(.system(size: 10, design: .monospaced))
-                .padding(5)
-                .background(Color.primary.opacity(0.06))
-                .cornerRadius(4)
-                .onSubmit { save() }
+            HStack {
+                Text("endpoint")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 60, alignment: .leading)
+                TextField("http://localhost:11434", text: $endpoint)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 10, design: .monospaced))
+                    .padding(5)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(4)
+                    .onSubmit { save() }
+            }
 
-            DebugMetric(label: "model", value: "")
-            TextField("e.g. mistral, llama2", text: $model)
-                .textFieldStyle(.plain)
-                .font(.system(size: 10, design: .monospaced))
-                .padding(5)
-                .background(Color.primary.opacity(0.06))
-                .cornerRadius(4)
-                .onSubmit { save() }
+            HStack {
+                Text("model")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 60, alignment: .leading)
+                TextField("e.g. mistral, llama2", text: $model)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 10, design: .monospaced))
+                    .padding(5)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(4)
+                    .onSubmit { save() }
+            }
 
             Button("save") { save() }
                 .font(.system(size: 9, design: .monospaced))
@@ -541,6 +854,50 @@ private struct OllamaConfigFields: View {
     }
 }
 
+// MARK: - Shared Components
+
+private struct DebugMetric: View {
+    var label: String
+    var value: String
+    var body: some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+            Text(value)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.primary)
+        }
+    }
+}
+
+private struct AnchorPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .monospaced).weight(.medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.accentColor.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.3))
+            .foregroundStyle(.white)
+            .cornerRadius(8)
+    }
+}
+
+private struct AnchorDestructiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, design: .monospaced).weight(.medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.red.opacity(configuration.isPressed ? 0.65 : 0.8))
+            .foregroundStyle(.white)
+            .cornerRadius(8)
+    }
+}
+
 private struct VisualEffect: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -550,4 +907,36 @@ private struct VisualEffect: NSViewRepresentable {
         return view
     }
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+// MARK: - RiskLevel Extensions
+
+extension RiskLevel {
+    var label: String {
+        switch self { case .stable: "STABLE"; case .atRisk: "AT RISK"; case .drift: "DRIFT" }
+    }
+    var color: Color {
+        switch self { case .stable: .green; case .atRisk: .orange; case .drift: .red }
+    }
+}
+
+// MARK: - Helpers
+
+private func scoreColor(for score: Double) -> Color {
+    if score >= 0.7 { return .green }
+    if score >= 0.4 { return .orange }
+    return .red
+}
+
+private func formatDuration(_ seconds: TimeInterval) -> String {
+    let s = Int(seconds)
+    if s < 60  { return "\(s)s" }
+    if s < 3600 {
+        let m = s / 60
+        let r = s % 60
+        return r == 0 ? "\(m)m" : "\(m)m \(r)s"
+    }
+    let h = s / 3600
+    let m = (s % 3600) / 60
+    return m == 0 ? "\(h)h" : "\(h)h \(m)m"
 }

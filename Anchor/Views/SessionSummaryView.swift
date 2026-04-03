@@ -18,7 +18,7 @@ struct SessionSummaryView: View {
             }
             .padding(28)
         }
-        .frame(width: 320)
+        .frame(width: 300)
     }
 
     private var header: some View {
