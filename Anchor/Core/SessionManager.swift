@@ -13,22 +13,12 @@ final class SessionManager {
     private init() {}
 
     func start(
-        taskTitle:      String,
-        strictness:     FocusSession.Strictness,
-        allowedApps:    Set<String> = [],
-        ambiguousApps:  Set<String> = [],
-        blockedApps:    Set<String> = [],
-        allowedDomains: Set<String> = [],
-        blockedDomains: Set<String> = []
+        taskTitle:          String,
+        appClassifications: [String: ContextFitLevel] = [:]
     ) {
         let session = FocusSession(
-            taskTitle:      taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-            strictness:     strictness,
-            allowedApps:    allowedApps,
-            ambiguousApps:  ambiguousApps,
-            blockedApps:    blockedApps,
-            allowedDomains: allowedDomains,
-            blockedDomains: blockedDomains
+            taskTitle:          taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            appClassifications: appClassifications
         )
         activeSession = session
         isPaused = false
@@ -36,15 +26,17 @@ final class SessionManager {
         EventStore.shared.append(
             type: "session_started",
             data: [
-                "session_id":      session.id.uuidString,
-                "task_title":      session.taskTitle,
-                "strictness":      session.strictness.rawValue,
-                "allowed_apps":    session.allowedApps.sorted().joined(separator: ","),
-                "blocked_apps":    session.blockedApps.sorted().joined(separator: ","),
-                "allowed_domains": session.allowedDomains.sorted().joined(separator: ","),
-                "blocked_domains": session.blockedDomains.sorted().joined(separator: ",")
+                "session_id": session.id.uuidString,
+                "task_title": session.taskTitle,
+                "on_task":    session.appClassifications.filter { $0.value == .onTask }.keys.sorted().joined(separator: ","),
+                "ambiguous":  session.appClassifications.filter { $0.value == .ambiguous }.keys.sorted().joined(separator: ","),
+                "off_task":   session.appClassifications.filter { $0.value == .offTask }.keys.sorted().joined(separator: ",")
             ]
         )
+    }
+
+    func classifyApp(_ app: String, as level: ContextFitLevel) {
+        activeSession?.classifyApp(app, as: level)
     }
 
     func pause(reason: String = "manual") {

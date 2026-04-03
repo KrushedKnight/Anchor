@@ -19,14 +19,11 @@ struct ContentView: View {
 }
 
 struct SessionStartView: View {
-    @State private var taskTitle:        String                  = ""
-    @State private var strictness:       FocusSession.Strictness = .normal
-    @State private var allowedApps:      Set<String>             = []
-    @State private var ambiguousApps:    Set<String>             = []
-    @State private var blockedApps:      Set<String>             = []
-    @State private var runningApps:      [String]                = []
-    @State private var isClassifying:    Bool                    = false
-    @State private var classifyDebounce: Task<Void, Never>?      = nil
+    @State private var taskTitle:           String                         = ""
+    @State private var classifications:     [String: ContextFitLevel]      = [:]
+    @State private var runningApps:         [String]                       = []
+    @State private var isClassifying:       Bool                           = false
+    @State private var classifyDebounce:    Task<Void, Never>?             = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -54,34 +51,8 @@ struct SessionStartView: View {
                     }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Strictness")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    ForEach(FocusSession.Strictness.allCases, id: \.self) { level in
-                        Button(level.rawValue) { strictness = level }
-                            .buttonStyle(PickerButtonStyle(isSelected: strictness == level))
-                    }
-                }
-            }
-
-            AppPickerSection(
-                title:       "Blocked Apps",
-                apps:        runningApps,
-                selected:    $blockedApps,
-                conflicting: $allowedApps,
-                isLoading:   isClassifying
-            )
-
-            if strictness == .strict {
-                AppPickerSection(
-                    title:       "Allowed Apps",
-                    apps:        runningApps,
-                    selected:    $allowedApps,
-                    conflicting: $blockedApps,
-                    isLoading:   isClassifying
-                )
+            if !classifications.isEmpty || isClassifying {
+                ClassificationPreview(classifications: classifications, isLoading: isClassifying)
             }
 
             Button("Start Session") { tryStart() }
@@ -106,11 +77,8 @@ struct SessionStartView: View {
     private func tryStart() {
         guard !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         SessionManager.shared.start(
-            taskTitle:    taskTitle,
-            strictness:   strictness,
-            allowedApps:  allowedApps,
-            ambiguousApps: ambiguousApps,
-            blockedApps:  blockedApps
+            taskTitle:          taskTitle,
+            appClassifications: classifications
         )
     }
 
@@ -126,12 +94,65 @@ struct SessionStartView: View {
             defer { isClassifying = false }
             do {
                 let result = try await TaskClassifier.shared.classify(task: trimmed, apps: runningApps)
-                blockedApps   = result.offTask
-                ambiguousApps = result.ambiguous
-                if strictness == .strict {
-                    allowedApps = result.onTask
-                }
+                var map: [String: ContextFitLevel] = [:]
+                for app in result.onTask    { map[app] = .onTask }
+                for app in result.ambiguous { map[app] = .ambiguous }
+                for app in result.offTask   { map[app] = .offTask }
+                classifications = map
             } catch {}
+        }
+    }
+}
+
+private struct ClassificationPreview: View {
+    var classifications: [String: ContextFitLevel]
+    var isLoading: Bool
+
+    private var onTask:    [String] { classifications.filter { $0.value == .onTask }.keys.sorted() }
+    private var ambiguous: [String] { classifications.filter { $0.value == .ambiguous }.keys.sorted() }
+    private var offTask:   [String] { classifications.filter { $0.value == .offTask }.keys.sorted() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text("App Classification")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                if isLoading {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 12, height: 12)
+                }
+            }
+
+            if !onTask.isEmpty {
+                ClassificationRow(label: "on-task", apps: onTask, color: .green)
+            }
+            if !ambiguous.isEmpty {
+                ClassificationRow(label: "neutral", apps: ambiguous, color: .yellow)
+            }
+            if !offTask.isEmpty {
+                ClassificationRow(label: "distractor", apps: offTask, color: .red)
+            }
+        }
+    }
+}
+
+private struct ClassificationRow: View {
+    var label: String
+    var apps:  [String]
+    var color: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+                .padding(.top, 4)
+            Text("\(label): \(apps.joined(separator: ", "))")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
     }
 }
@@ -157,21 +178,13 @@ struct SessionActiveView: View {
 
             if let session = sessionManager.activeSession {
                 VStack(alignment: .leading, spacing: 10) {
-                    SessionRow(label: "Task",       value: session.taskTitle.isEmpty ? "—" : session.taskTitle)
-                    SessionRow(label: "Strictness", value: session.strictness.rawValue)
-                    SessionRow(label: "Started",    value: session.startedAt.formatted(date: .omitted, time: .shortened))
+                    SessionRow(label: "Task",    value: session.taskTitle.isEmpty ? "—" : session.taskTitle)
+                    SessionRow(label: "Started", value: session.startedAt.formatted(date: .omitted, time: .shortened))
                     SessionRow(
                         label:      "Context",
-                        value:      engine.state.isOffTaskContext ? "OFF TASK" : "ON TASK",
-                        valueColor: engine.state.isOffTaskContext ? .orange : .green
+                        value:      contextLabel,
+                        valueColor: contextColor
                     )
-
-                    if !session.blockedApps.isEmpty {
-                        SessionRow(label: "Blocked", value: session.blockedApps.sorted().joined(separator: ", "))
-                    }
-                    if !session.allowedApps.isEmpty {
-                        SessionRow(label: "Allowed", value: session.allowedApps.sorted().joined(separator: ", "))
-                    }
                 }
             }
 
@@ -182,6 +195,20 @@ struct SessionActiveView: View {
         }
         .padding(28)
         .frame(width: 320)
+    }
+
+    private var contextLabel: String {
+        let fit = engine.state.contextFit
+        if fit >= 0.8 { return "ON TASK" }
+        if fit >= 0.4 { return "NEUTRAL" }
+        return "OFF TASK"
+    }
+
+    private var contextColor: Color {
+        let fit = engine.state.contextFit
+        if fit >= 0.8 { return .green }
+        if fit >= 0.4 { return .yellow }
+        return .orange
     }
 }
 
@@ -334,152 +361,6 @@ private struct DebugMetric: View {
     }
 }
 
-private struct AppPickerSection: View {
-    var title:       String
-    var apps:        [String]
-    @Binding var selected:    Set<String>
-    @Binding var conflicting: Set<String>
-    var isLoading:   Bool  = false
-    @State private var showPopover = false
-    @State private var pulsing:    Bool = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                if isLoading {
-                    Text("analyzing…")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .opacity(pulsing ? 0.3 : 1.0)
-                }
-                Spacer()
-                if isLoading {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 16, height: 16)
-                } else {
-                    Button {
-                        showPopover = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus")
-                            Text(selected.isEmpty ? "Add" : "\(selected.count) selected")
-                        }
-                        .font(.system(.caption2, design: .monospaced))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                    .popover(isPresented: $showPopover, arrowEdge: .trailing) {
-                        AppListPopover(apps: apps, selected: $selected, conflicting: $conflicting)
-                    }
-                }
-            }
-            .onChange(of: isLoading) { _, val in
-                if val {
-                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                        pulsing = true
-                    }
-                } else {
-                    withAnimation(.easeInOut(duration: 0.2)) { pulsing = false }
-                }
-            }
-
-            if !selected.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(selected.sorted(), id: \.self) { app in
-                            HStack(spacing: 3) {
-                                Text(app)
-                                    .font(.system(.caption2, design: .monospaced))
-                                    .lineLimit(1)
-                                Button {
-                                    selected.remove(app)
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 8, weight: .semibold))
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Color.primary.opacity(0.07))
-                            .cornerRadius(4)
-                        }
-                    }
-                }
-                .opacity(pulsing ? 0.4 : 1.0)
-                .disabled(isLoading)
-                .animation(.easeInOut(duration: 0.3), value: isLoading)
-            }
-        }
-    }
-}
-
-private struct AppListPopover: View {
-    var apps:        [String]
-    @Binding var selected:    Set<String>
-    @Binding var conflicting: Set<String>
-    @State private var search = ""
-
-    private var filtered: [String] {
-        search.isEmpty ? apps : apps.filter { $0.localizedCaseInsensitiveContains(search) }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TextField("Search", text: $search)
-                .textFieldStyle(.plain)
-                .font(.system(.caption, design: .monospaced))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    if filtered.isEmpty {
-                        Text("No apps found")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .padding(16)
-                    } else {
-                        ForEach(filtered, id: \.self) { app in
-                            HStack(spacing: 8) {
-                                Image(systemName: selected.contains(app) ? "checkmark.square.fill" : "square")
-                                    .font(.caption)
-                                    .foregroundStyle(selected.contains(app) ? Color.accentColor : Color.secondary)
-                                Text(app)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                            }
-                            .contentShape(Rectangle())
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .onTapGesture { toggle(app) }
-                        }
-                    }
-                }
-            }
-            .frame(height: 240)
-        }
-        .frame(width: 220)
-    }
-
-    private func toggle(_ app: String) {
-        if selected.contains(app) {
-            selected.remove(app)
-        } else {
-            selected.insert(app)
-            conflicting.remove(app)
-        }
-    }
-}
-
 private struct SessionRow: View {
     var label:      String
     var value:      String
@@ -495,20 +376,6 @@ private struct SessionRow: View {
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(valueColor)
         }
-    }
-}
-
-private struct PickerButtonStyle: ButtonStyle {
-    var isSelected: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.caption, design: .monospaced))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            .background(isSelected ? Color.accentColor : Color.primary.opacity(0.07))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .cornerRadius(6)
     }
 }
 

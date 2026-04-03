@@ -67,21 +67,24 @@ final class ActiveAppObserver {
         newApp:    String,
         sessionId: String
     ) {
-        if !prevApp.isEmpty && session.allowedApps.contains(prevApp) {
+        let prevLevel = session.fitForApp(prevApp)
+        let newLevel  = session.fitForApp(newApp)
+
+        if !prevApp.isEmpty && prevLevel == .onTask {
             EventStore.shared.append(
                 type: "context_exited_allowed_app",
                 data: ["session_id": sessionId, "app_name": prevApp]
             )
         }
 
-        if session.blockedApps.contains(newApp) {
+        if let level = newLevel {
+            let eventType: String = switch level {
+            case .onTask:    "context_entered_allowed_app"
+            case .ambiguous: "context_entered_ambiguous_app"
+            case .offTask:   "context_entered_blocked_app"
+            }
             EventStore.shared.append(
-                type: "context_entered_blocked_app",
-                data: ["session_id": sessionId, "app_name": newApp]
-            )
-        } else if session.allowedApps.contains(newApp) {
-            EventStore.shared.append(
-                type: "context_entered_allowed_app",
+                type: eventType,
                 data: ["session_id": sessionId, "app_name": newApp]
             )
         }
@@ -104,12 +107,11 @@ final class ActiveAppObserver {
     }
 
     private func policyState(app: String, session: FocusSession) -> String {
-        if session.blockedApps.contains(app) { return "off_policy" }
-        switch session.strictness {
-        case .normal: return "on_policy"
-        case .strict:
-            if session.allowedApps.isEmpty { return "on_policy" }
-            return session.allowedApps.contains(app) ? "on_policy" : "off_policy"
+        guard let level = session.fitForApp(app) else { return "unclassified" }
+        switch level {
+        case .onTask:    return "on_policy"
+        case .ambiguous: return "ambiguous"
+        case .offTask:   return "off_policy"
         }
     }
 }

@@ -9,7 +9,6 @@ struct SessionSummary: Codable, Identifiable {
     var id:         UUID
     var sessionId:  UUID
     var taskTitle:  String
-    var strictness: String
 
     var startedAt: Date
     var endedAt:   Date

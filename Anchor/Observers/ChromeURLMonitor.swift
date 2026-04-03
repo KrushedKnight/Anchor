@@ -89,17 +89,10 @@ final class ChromeURLMonitor {
     }
 
     private func emitDomainPolicyEvents(session: FocusSession, domain: String, sessionId: String) {
-        if session.blockedDomains.contains(domain) {
-            EventStore.shared.append(
-                type: "context_entered_blocked_domain",
-                data: ["session_id": sessionId, "domain": domain]
-            )
-        } else if session.allowedDomains.contains(domain) {
-            EventStore.shared.append(
-                type: "context_entered_allowed_domain",
-                data: ["session_id": sessionId, "domain": domain]
-            )
-        }
+        EventStore.shared.append(
+            type: "domain_visited",
+            data: ["session_id": sessionId, "domain": domain]
+        )
     }
 
     private struct ChromeResult {

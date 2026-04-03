@@ -2,8 +2,6 @@ import Foundation
 
 struct RuleConfig {
     var knownBrowsers:              Set<String>
-    var distractingDomains:         Set<String>
-    var ambiguousDomains:           Set<String>
     var evaluationInterval:         TimeInterval    // engine tick rate
 
     var scatterAppsThreshold:       Int             // distinct apps in 5m before scatter state triggers
@@ -20,16 +18,6 @@ struct RuleConfig {
 
     static let defaults = RuleConfig(
         knownBrowsers: ["Google Chrome", "Firefox", "Safari"],
-        distractingDomains: [
-            "youtube.com", "reddit.com", "twitter.com", "x.com",
-            "instagram.com", "tiktok.com", "twitch.tv", "facebook.com",
-            "netflix.com", "hulu.com"
-        ],
-        ambiguousDomains: [
-            "github.com", "stackoverflow.com", "docs.swift.org",
-            "developer.apple.com", "google.com", "notion.so", "linear.app",
-            "chat.openai.com", "claude.ai", "docs.google.com"
-        ],
         evaluationInterval:         2,
         scatterAppsThreshold:       3,
         dwellSkimmingThreshold:     8,

@@ -20,6 +20,7 @@ final class DriftEngine {
     private let analyzer:                BehaviorAnalyzer
     private let accumulator:             SessionStatsAccumulator
     private var lastPublishedRiskLevel:  RiskLevel?
+    private var pendingClassifications:  Set<String> = []
 
     init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared, accumulator: SessionStatsAccumulator = .shared) {
         self.bus         = bus
@@ -76,13 +77,14 @@ final class DriftEngine {
     private func computeContextFit() {
         let currentSessionId = SessionManager.shared.activeSession?.id
         if currentSessionId != lastSessionId {
-            offTaskAccumulator = 0
-            focusScore         = 1.0
-            pendingLevel       = .stable
-            pendingTicks       = 0
-            currentWorkState   = .idle
-            workStateEnteredAt = .now
-            lastSessionId      = currentSessionId
+            offTaskAccumulator     = 0
+            focusScore             = 1.0
+            pendingLevel           = .stable
+            pendingTicks           = 0
+            currentWorkState       = .idle
+            workStateEnteredAt     = .now
+            lastSessionId          = currentSessionId
+            pendingClassifications = []
             accumulator.reset()
         }
 
@@ -96,34 +98,34 @@ final class DriftEngine {
         state.sessionActive    = true
         state.sessionTaskTitle = session.taskTitle
 
-        let app    = state.currentApp
-        let domain = state.currentDomain
-
-        if session.blockedApps.contains(app) || session.blockedDomains.contains(domain) {
-            state.contextFit = 0.1
-            return
-        }
-
-        if !domain.isEmpty && config.distractingDomains.contains(domain) {
-            state.contextFit = 0.15
-            return
-        }
-
-        if session.allowedApps.contains(app) || (!domain.isEmpty && session.allowedDomains.contains(domain)) {
+        let app = state.currentApp
+        guard !app.isEmpty else {
             state.contextFit = 1.0
             return
         }
 
-        if session.ambiguousApps.contains(app) || (!domain.isEmpty && config.ambiguousDomains.contains(domain)) {
-            state.contextFit = 0.55
+        if let level = session.fitForApp(app) {
+            state.contextFit = level.contextFit
             return
         }
 
-        switch session.strictness {
-        case .normal:
-            state.contextFit = 0.75
-        case .strict:
-            state.contextFit = !session.allowedApps.isEmpty ? 0.25 : 0.75
+        state.contextFit = 0.55
+        lazyClassify(app: app, task: session.taskTitle)
+    }
+
+    private func lazyClassify(app: String, task: String) {
+        guard !pendingClassifications.contains(app) else { return }
+        pendingClassifications.insert(app)
+
+        Task {
+            do {
+                let level = try await TaskClassifier.shared.classifySingle(task: task, app: app)
+                SessionManager.shared.classifyApp(app, as: level)
+                print("[DriftEngine] lazy classified '\(app)' → \(level.rawValue)")
+            } catch {
+                print("[DriftEngine] lazy classify failed for '\(app)': \(error)")
+            }
+            pendingClassifications.remove(app)
         }
     }
 

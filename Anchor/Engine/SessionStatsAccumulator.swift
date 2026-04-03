@@ -53,7 +53,6 @@ final class SessionStatsAccumulator {
             id:              UUID(),
             sessionId:       session.id,
             taskTitle:       session.taskTitle,
-            strictness:      session.strictness.rawValue,
             startedAt:       session.startedAt,
             endedAt:         .now,
             focusScoreAvg:   avg,

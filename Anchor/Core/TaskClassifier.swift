@@ -10,6 +10,13 @@ final class TaskClassifier {
     static let shared = TaskClassifier()
     private init() {}
 
+    func classifySingle(task: String, app: String) async throws -> ContextFitLevel {
+        let result = try await classify(task: task, apps: [app])
+        if result.onTask.contains(app)  { return .onTask }
+        if result.offTask.contains(app) { return .offTask }
+        return .ambiguous
+    }
+
     func classify(task: String, apps: [String]) async throws -> AppClassification {
         guard !task.isEmpty, !apps.isEmpty else {
             return AppClassification(onTask: [], ambiguous: [], offTask: [])
