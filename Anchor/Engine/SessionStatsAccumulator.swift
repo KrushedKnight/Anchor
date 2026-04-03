@@ -10,17 +10,23 @@ final class SessionStatsAccumulator {
     private(set) var interventionCount: Int                        = 0
     private(set) var escalationCount:   Int                        = 0
 
+    private var interventionTimestamps: [(date: Date, level: Intervention.Level)] = []
+    private var focusScoreTimeline:     [(date: Date, score: Double)]             = []
+
     func reset() {
-        focusScoreSamples     = []
-        timeInLevel           = [:]
-        offTaskDwellByContext = [:]
-        longestFocusStreak    = 0
-        interventionCount     = 0
-        escalationCount       = 0
+        focusScoreSamples      = []
+        timeInLevel            = [:]
+        offTaskDwellByContext  = [:]
+        longestFocusStreak     = 0
+        interventionCount      = 0
+        escalationCount        = 0
+        interventionTimestamps = []
+        focusScoreTimeline     = []
     }
 
     func record(state: EngineState, interval: TimeInterval) {
         focusScoreSamples.append(state.focusScore)
+        focusScoreTimeline.append((.now, state.focusScore))
         timeInLevel[state.riskLevel, default: 0] += interval
 
         if state.isOffTaskContext {
@@ -38,6 +44,20 @@ final class SessionStatsAccumulator {
     func recordIntervention(level: Intervention.Level) {
         interventionCount += 1
         if level == .strong { escalationCount += 1 }
+        interventionTimestamps.append((.now, level))
+    }
+
+    func evaluateInterventionOutcomes(
+        recoveryWindow:    TimeInterval = 120,
+        recoveryThreshold: Double       = 0.7
+    ) -> [InterventionOutcome] {
+        interventionTimestamps.map { (date, level) in
+            let windowEnd = date.addingTimeInterval(recoveryWindow)
+            let recovered = focusScoreTimeline.contains { sample in
+                sample.date > date && sample.date <= windowEnd && sample.score >= recoveryThreshold
+            }
+            return InterventionOutcome(level: level, recovered: recovered)
+        }
     }
 
     func finalize(session: FocusSession, finalState: EngineState) -> SessionSummary {

@@ -67,6 +67,11 @@ final class SessionManager {
         SessionSummaryStore.shared.save(summary)
         lastSummary = summary
 
+        let outcomes = SessionStatsAccumulator.shared.evaluateInterventionOutcomes()
+        var profile  = UserProfileStore.shared.load()
+        UserProfileUpdater.update(profile: &profile, with: summary, interventionOutcomes: outcomes)
+        UserProfileStore.shared.save(profile)
+
         EventStore.shared.append(
             type: "session_ended",
             data: ["session_id": session.id.uuidString, "end_reason": reason]
