@@ -115,7 +115,8 @@ struct SessionStartView: View {
     private func scheduleClassification(for value: String) {
         classifyDebounce?.cancel()
         let trimmed = value.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count >= 3, APIKeyStore.shared.isSet(for: .anthropic) else { return }
+        let provider = APIKeyStore.shared.activeProvider
+        guard trimmed.count >= 3, provider == .ollama || APIKeyStore.shared.isSet(for: provider) else { return }
         classifyDebounce = Task {
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
@@ -193,10 +194,6 @@ private extension RiskLevel {
 private struct DebugPanel: View {
     var state: EngineState
     var snap:  BehaviorSnapshot
-
-    @State private var editingProvider: APIProvider? = nil
-    @State private var keyInput:        String       = ""
-    var apiKeyStore = APIKeyStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -284,21 +281,7 @@ private struct DebugPanel: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Divider()
-                Text("API KEYS")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-
-                ForEach(APIProvider.allCases) { provider in
-                    APIKeyRow(
-                        provider:        provider,
-                        store:           apiKeyStore,
-                        editingProvider: $editingProvider,
-                        keyInput:        $keyInput
-                    )
-                }
-            }
+            ProviderSettingsSection()
         }
     }
 
@@ -579,64 +562,139 @@ private struct DestructiveButtonStyle: ButtonStyle {
     }
 }
 
-private struct APIKeyRow: View {
-    var provider:        APIProvider
-    var store:           APIKeyStore
-    @Binding var editingProvider: APIProvider?
-    @Binding var keyInput:        String
-
-    private var isEditing: Bool { editingProvider == provider }
+private struct ProviderSettingsSection: View {
+    var store = APIKeyStore.shared
+    @State private var keyInput:      String = ""
+    @State private var ollamaEndpoint: String = ""
+    @State private var ollamaModel:    String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(provider.displayName.uppercased())
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.tertiary)
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            Text("AI PROVIDER")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
 
-            if store.isSet(for: provider) && !isEditing {
-                HStack(spacing: 6) {
-                    Text("●●●●●●●●●●●●")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("change") {
-                        keyInput        = ""
-                        editingProvider = provider
+            HStack(spacing: 6) {
+                ForEach(APIProvider.allCases) { provider in
+                    Button(provider.displayName) {
+                        store.activeProvider = provider
+                        keyInput = ""
                     }
+                    .buttonStyle(ProviderPickerStyle(isSelected: store.activeProvider == provider))
+                }
+            }
+
+            switch store.activeProvider {
+            case .anthropic, .openAI:
+                APIKeyField(provider: store.activeProvider, store: store, keyInput: $keyInput)
+            case .ollama:
+                OllamaConfigFields(store: store, endpoint: $ollamaEndpoint, model: $ollamaModel)
+            }
+        }
+        .onAppear {
+            ollamaEndpoint = store.ollamaConfig.endpoint
+            ollamaModel    = store.ollamaConfig.modelName
+        }
+    }
+}
+
+private struct ProviderPickerStyle: ButtonStyle {
+    var isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isSelected ? Color.accentColor : Color.primary.opacity(0.07))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .cornerRadius(4)
+    }
+}
+
+private struct APIKeyField: View {
+    var provider: APIProvider
+    var store:    APIKeyStore
+    @Binding var keyInput: String
+
+    var body: some View {
+        if store.isSet(for: provider) {
+            HStack(spacing: 6) {
+                Text("●●●●●●●●●●●●")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("clear") { store.clear(for: provider) }
+                    .font(.system(size: 9, design: .monospaced))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+            }
+        } else {
+            HStack(spacing: 6) {
+                SecureField(provider.placeholder, text: $keyInput)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 10, design: .monospaced))
+                    .padding(5)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(4)
+                    .onSubmit { save() }
+                Button("save") { save() }
                     .font(.system(size: 9, design: .monospaced))
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
-                    Button("clear") { store.clear(for: provider) }
-                        .font(.system(size: 9, design: .monospaced))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.red)
-                }
-            } else {
-                HStack(spacing: 6) {
-                    SecureField(provider.placeholder, text: isEditing ? $keyInput : .constant(""))
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 10, design: .monospaced))
-                        .padding(5)
-                        .background(Color.primary.opacity(0.06))
-                        .cornerRadius(4)
-                        .onTapGesture { if !isEditing { editingProvider = provider } }
-                        .onSubmit { commit() }
-                    Button("save") { commit() }
-                        .font(.system(size: 9, design: .monospaced))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .disabled(!isEditing || keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
+                    .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
     }
 
-    private func commit() {
+    private func save() {
         let trimmed = keyInput.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         store.save(trimmed, for: provider)
-        keyInput        = ""
-        editingProvider = nil
+        keyInput = ""
+    }
+}
+
+private struct OllamaConfigFields: View {
+    var store: APIKeyStore
+    @Binding var endpoint: String
+    @Binding var model:    String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            DebugMetric(label: "endpoint", value: "")
+            TextField("http://localhost:11434", text: $endpoint)
+                .textFieldStyle(.plain)
+                .font(.system(size: 10, design: .monospaced))
+                .padding(5)
+                .background(Color.primary.opacity(0.06))
+                .cornerRadius(4)
+                .onSubmit { save() }
+
+            DebugMetric(label: "model", value: "")
+            TextField("e.g. mistral, llama2", text: $model)
+                .textFieldStyle(.plain)
+                .font(.system(size: 10, design: .monospaced))
+                .padding(5)
+                .background(Color.primary.opacity(0.06))
+                .cornerRadius(4)
+                .onSubmit { save() }
+
+            Button("save") { save() }
+                .font(.system(size: 9, design: .monospaced))
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .disabled(endpoint.isEmpty || model.isEmpty)
+        }
+    }
+
+    private func save() {
+        let config = OllamaConfig(
+            endpoint:  endpoint.trimmingCharacters(in: .whitespaces),
+            modelName: model.trimmingCharacters(in: .whitespaces)
+        )
+        store.saveOllamaConfig(config)
     }
 }
 
