@@ -2,23 +2,12 @@ import Foundation
 import SwiftUI
 
 enum WorkState: String {
-    case deepFocus            = "Deep Focus"
-    case productiveSwitching  = "Productive Switching"
-    case stuckCycling         = "Stuck Cycling"
-    case noveltySeeking       = "Novelty Seeking"
-    case passiveDrift         = "Passive Drift"
-    case idle                 = "Idle"
-
-    var symbol: String {
-        switch self {
-        case .deepFocus:           "🎯"
-        case .productiveSwitching: "🔀"
-        case .stuckCycling:        "🔄"
-        case .noveltySeeking:      "🦋"
-        case .passiveDrift:        "📺"
-        case .idle:                "💤"
-        }
-    }
+    case deepFocus            = "Locked In"
+    case productiveSwitching  = "On Track"
+    case stuckCycling         = "Going in Circles"
+    case noveltySeeking       = "Wandering"
+    case passiveDrift         = "Zoned Out"
+    case idle                 = "Away"
 
     var stateColor: Color {
         switch self {
@@ -28,6 +17,28 @@ enum WorkState: String {
         case .noveltySeeking:      .orange
         case .passiveDrift:        .red
         case .idle:                .secondary
+        }
+    }
+
+    var baseTargetScore: Double {
+        switch self {
+        case .deepFocus:           0.95
+        case .productiveSwitching: 0.80
+        case .stuckCycling:        0.60
+        case .noveltySeeking:      0.40
+        case .passiveDrift:        0.35
+        case .idle:                0.70
+        }
+    }
+
+    var decayFloor: Double {
+        switch self {
+        case .deepFocus:           0.90
+        case .productiveSwitching: 0.70
+        case .stuckCycling:        0.40
+        case .noveltySeeking:      0.15
+        case .passiveDrift:        0.10
+        case .idle:                0.55
         }
     }
 }

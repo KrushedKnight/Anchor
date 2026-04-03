@@ -45,8 +45,8 @@ final class DriftEngine {
         syncState(from: snap)
         computeContextFit()
         decayAccumulator()
-        updateFocusScore(snap)
         updateWorkState(snap)
+        updateFocusScore(snap)
 
         state.totalOffTaskDwell  = liveOffTaskDwell(snap)
         state.accumulatorSeconds = offTaskAccumulator
@@ -191,99 +191,101 @@ final class DriftEngine {
         guard state.sessionActive else {
             focusScore = 1.0
             state.focusScore             = 1.0
+            state.focusQuality           = 1.0
             state.riskLevel              = .stable
             state.dominantPressureSource = .none
             return
         }
 
-        let (target, dominant) = computeTargetScore(snap)
+        let ws       = state.workState
+        let duration = state.workStateDuration
+        let quality  = focusQuality(for: ws, snap: snap)
 
-        let diff = target - focusScore
+        state.focusQuality = quality
+
+        let desiredLevel = assessRisk(state: ws, duration: duration)
+        state.riskLevel  = applyHysteresis(desired: desiredLevel)
+
+        let target = targetScore(for: ws, duration: duration, quality: quality)
+        let diff   = target - focusScore
         if diff < 0 {
             focusScore += max(diff, -0.05)
         } else {
             focusScore += min(diff, 0.08)
         }
         focusScore = max(0.0, min(1.0, focusScore))
+        state.focusScore = focusScore
 
-        let desiredLevel         = levelFromScore(focusScore)
-        state.riskLevel          = applyHysteresis(desired: desiredLevel)
-        state.focusScore         = focusScore
-        state.dominantPressureSource = dominant
+        state.dominantPressureSource = pressureSource(for: ws)
     }
 
-    private func computeTargetScore(_ snap: BehaviorSnapshot) -> (Double, PressureSource) {
-        let offTaskPressure: Double = (1.0 - state.contextFit) * config.offTaskPressureScale
+    private func assessRisk(state ws: WorkState, duration: TimeInterval) -> RiskLevel {
+        switch ws {
+        case .deepFocus, .productiveSwitching:
+            return .stable
 
-        let scatterRaw = Double(max(0, snap.distinctApps5m - config.scatterAppsThreshold)) / 4.0
-        var scatterPressure = min(scatterRaw, 1.0) * 0.35
+        case .stuckCycling:
+            return duration >= config.stuckCyclingAtRisk ? .atRisk : .stable
 
-        var dwellPressure: Double = 0
-        if !snap.recentAppDwells.isEmpty {
-            let avgDwell = snap.recentAppDwells.map(\.duration).reduce(0, +) / Double(snap.recentAppDwells.count)
-            if avgDwell < config.dwellSkimmingThreshold {
-                dwellPressure = 0.25
-            } else {
-                let ratio = min((avgDwell - config.dwellSkimmingThreshold) / (60.0 - config.dwellSkimmingThreshold), 1.0)
-                dwellPressure = (1.0 - ratio) * 0.25
-            }
+        case .noveltySeeking:
+            if duration >= config.noveltySeekingDrift  { return .drift }
+            if duration >= config.noveltySeekingAtRisk { return .atRisk }
+            return .stable
+
+        case .passiveDrift:
+            if duration >= config.passiveDriftDrift  { return .drift }
+            if duration >= config.passiveDriftAtRisk { return .atRisk }
+            return .stable
+
+        case .idle:
+            return duration >= config.idleAtRisk ? .atRisk : .stable
         }
-
-        if snap.isBouncing {
-            scatterPressure *= (1.0 - config.bouncingSuppression)
-            dwellPressure   *= (1.0 - config.bouncingSuppression)
-        }
-
-        let idleExcess   = max(0, snap.idleRatio120s - config.idleRatioPressureFloor)
-        let idlePressure = min(idleExcess / config.idleRatioPressureFloor, 1.0) * 0.20
-
-        let accumulatorPressure = min(offTaskAccumulator / config.totalOffTaskDwellThreshold, 1.0) * 0.20
-
-        let streakBonus = min(snap.currentFocusStreak / config.focusStreakBonusWindow, 1.0) * 0.15
-
-        let target = max(0.0, min(1.0,
-            1.0
-            - offTaskPressure
-            - scatterPressure
-            - dwellPressure
-            - idlePressure
-            - accumulatorPressure
-            + streakBonus
-        ))
-
-        let pressures: [(PressureSource, Double)] = [
-            (.offTaskContext, offTaskPressure),
-            (.scatter,        scatterPressure),
-            (.skimming,       dwellPressure),
-            (.idleRatio,      idlePressure),
-            (.accumulator,    accumulatorPressure)
-        ]
-        let top = pressures.max(by: { $0.1 < $1.1 })
-        let dominant: PressureSource = (top?.1 ?? 0) > 0.05 ? (top?.0 ?? .none) : .none
-
-        state.pressures = PressureBreakdown(
-            offTask:     offTaskPressure,
-            scatter:     scatterPressure,
-            skimming:    dwellPressure,
-            idleRatio:   idlePressure,
-            accumulator: accumulatorPressure,
-            streakBonus: streakBonus,
-            target:      target
-        )
-
-        return (target, dominant)
     }
 
-    private func levelFromScore(_ score: Double) -> RiskLevel {
-        switch state.riskLevel {
-        case .stable:
-            return score < config.atRiskEnterThreshold ? .atRisk : .stable
-        case .atRisk:
-            if score < config.driftEnterThreshold { return .drift }
-            if score > config.atRiskExitThreshold { return .stable }
-            return .atRisk
-        case .drift:
-            return score > config.driftExitThreshold ? .atRisk : .drift
+    private func focusQuality(for ws: WorkState, snap: BehaviorSnapshot) -> Double {
+        switch ws {
+        case .deepFocus:
+            let dwellFactor  = min(snap.dwellInCurrentContext / 300.0, 1.0)
+            let switchFactor = max(0, 1.0 - snap.switchesPerMinute / 6.0)
+            return dwellFactor * 0.5 + switchFactor * 0.5
+
+        case .productiveSwitching:
+            let fitFactor    = state.contextFit
+            let streakFactor = min(snap.currentFocusStreak / 300.0, 1.0)
+            return fitFactor * 0.6 + streakFactor * 0.4
+
+        case .stuckCycling:
+            return max(0, 1.0 - snap.switchesPerMinute / 10.0)
+
+        case .noveltySeeking:
+            let scatterFactor = max(0, 1.0 - Double(snap.distinctApps5m) / 8.0)
+            let dwellFactor   = min(averageDwell(snap) / 30.0, 1.0)
+            return scatterFactor * 0.5 + dwellFactor * 0.5
+
+        case .passiveDrift:
+            return state.contextFit
+
+        case .idle:
+            return 0.5
+        }
+    }
+
+    private func targetScore(for ws: WorkState, duration: TimeInterval, quality: Double) -> Double {
+        let base  = ws.baseTargetScore
+        let floor = ws.decayFloor
+        guard base > floor, config.scoreDecayWindow > 0 else { return base }
+        let timeFactor = min(duration / config.scoreDecayWindow, 1.0)
+        let decay      = timeFactor * (1.0 - quality * 0.6)
+        return base - (base - floor) * min(decay, 1.0)
+    }
+
+    private func pressureSource(for ws: WorkState) -> PressureSource {
+        switch ws {
+        case .deepFocus, .productiveSwitching: .none
+        case .stuckCycling:                    .scatter
+        case .noveltySeeking:                  .scatter
+        case .passiveDrift:                    .offTaskContext
+        case .idle:                            .idleRatio
         }
     }
 

@@ -3,22 +3,20 @@ import Foundation
 struct RuleConfig {
     var knownBrowsers:              Set<String>
     var distractingDomains:         Set<String>
-    var ambiguousDomains:           Set<String>     // plausibly work-related, gets partial pressure
-    var offTaskPressureScale:       Double          // max multiplier for off-task pressure (replaces hardcoded 0.8)
-    var totalOffTaskDwellThreshold: TimeInterval    // accumulator ceiling for pressure scaling
+    var ambiguousDomains:           Set<String>
     var evaluationInterval:         TimeInterval    // engine tick rate
 
-    var scatterAppsThreshold:       Int             // distinct apps in 5m before scatter pressure starts
-    var dwellSkimmingThreshold:     TimeInterval    // avg dwell below this = skimming
-    var bouncingSuppression:        Double          // fraction scatter/dwell pressure is reduced when bouncing
+    var scatterAppsThreshold:       Int             // distinct apps in 5m before scatter state triggers
+    var dwellSkimmingThreshold:     TimeInterval    // avg dwell below this = short dwells (used by state inference)
     var recoveryDecayRate:          Double          // accumulator seconds removed per on-task second
-    var idleRatioPressureFloor:     Double          // idle ratio below this = no pressure
-    var focusStreakBonusWindow:     TimeInterval    // streak duration for max recovery bonus
 
-    var atRiskEnterThreshold:       Double          // score drops below this → atRisk (2-tick confirm)
-    var atRiskExitThreshold:        Double          // score rises above this → stable (3-tick confirm)
-    var driftEnterThreshold:        Double          // score drops below this → drift (2-tick confirm)
-    var driftExitThreshold:         Double          // score rises above this → atRisk (4-tick confirm)
+    var stuckCyclingAtRisk:         TimeInterval    // seconds in stuckCycling before atRisk
+    var noveltySeekingAtRisk:       TimeInterval    // seconds in noveltySeeking before atRisk
+    var noveltySeekingDrift:        TimeInterval    // seconds in noveltySeeking before drift
+    var passiveDriftAtRisk:         TimeInterval    // seconds in passiveDrift before atRisk
+    var passiveDriftDrift:          TimeInterval    // seconds in passiveDrift before drift
+    var idleAtRisk:                 TimeInterval    // seconds idle before atRisk
+    var scoreDecayWindow:           TimeInterval    // seconds over which score decays from base to floor
 
     static let defaults = RuleConfig(
         knownBrowsers: ["Google Chrome", "Firefox", "Safari"],
@@ -32,18 +30,16 @@ struct RuleConfig {
             "developer.apple.com", "google.com", "notion.so", "linear.app",
             "chat.openai.com", "claude.ai", "docs.google.com"
         ],
-        offTaskPressureScale: 0.65,
-        totalOffTaskDwellThreshold: 180,
         evaluationInterval:         2,
         scatterAppsThreshold:       3,
         dwellSkimmingThreshold:     8,
-        bouncingSuppression:        0.6,
         recoveryDecayRate:          3.0,
-        idleRatioPressureFloor:     0.4,
-        focusStreakBonusWindow:     300,
-        atRiskEnterThreshold:       0.60,
-        atRiskExitThreshold:        0.70,
-        driftEnterThreshold:        0.30,
-        driftExitThreshold:         0.40
+        stuckCyclingAtRisk:         180,
+        noveltySeekingAtRisk:       30,
+        noveltySeekingDrift:        90,
+        passiveDriftAtRisk:         120,
+        passiveDriftDrift:          300,
+        idleAtRisk:                 30,
+        scoreDecayWindow:           300
     )
 }

@@ -22,34 +22,39 @@ struct WidgetView: View {
             HStack(spacing: 14) {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(riskColor)
+                        .fill(engine.state.workState.stateColor)
                         .frame(width: 8, height: 8)
-                    Text(riskLabel)
+                    Text(engine.state.workState.rawValue)
                         .font(.system(.caption, design: .monospaced).bold())
-                        .foregroundStyle(riskColor)
-                }
-
-                if engine.state.sessionActive && engine.state.isOffTaskContext {
-                    Divider().frame(height: 12)
-                    Text("OFF TASK")
-                        .font(.system(.caption2, design: .monospaced).bold())
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(engine.state.workState.stateColor)
                 }
 
                 Divider().frame(height: 12)
 
-                Text("dwell \(Int(engine.state.dwellInCurrentContext))s")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-
-                Text("\(String(format: "%.1f", engine.state.switchesPerMinute)) sw/min")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    scoreBar
+                    Text(String(format: "%.0f%%", engine.state.focusScore * 100))
+                        .font(.system(.caption2, design: .monospaced).bold())
+                        .foregroundStyle(riskColor)
+                }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(WidgetVisualEffect().ignoresSafeArea())
+    }
+
+    private var scoreBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.primary.opacity(0.12))
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(riskColor)
+                    .frame(width: geo.size.width * engine.state.focusScore)
+            }
+        }
+        .frame(width: 40, height: 5)
     }
 
     private var riskColor: Color {

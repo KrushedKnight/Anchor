@@ -4,16 +4,6 @@ enum PressureSource {
     case none, offTaskContext, scatter, skimming, idleRatio, accumulator
 }
 
-struct PressureBreakdown {
-    var offTask:     Double = 0
-    var scatter:     Double = 0
-    var skimming:    Double = 0
-    var idleRatio:   Double = 0
-    var accumulator: Double = 0
-    var streakBonus: Double = 0
-    var target:      Double = 1
-}
-
 struct EngineState {
     var riskLevel:              RiskLevel       = .stable
     var currentApp:             String          = ""
@@ -32,7 +22,7 @@ struct EngineState {
     var focusStreakSeconds:     TimeInterval    = 0
     var accumulatorSeconds:     TimeInterval    = 0
     var dominantPressureSource: PressureSource  = .none
-    var pressures:              PressureBreakdown = .init()
     var workState:              WorkState       = .idle
     var workStateDuration:      TimeInterval    = 0
+    var focusQuality:           Double          = 1.0
 }

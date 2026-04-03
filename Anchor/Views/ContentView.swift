@@ -206,24 +206,24 @@ private struct DebugPanel: View {
                 .foregroundStyle(.orange)
 
             HStack(spacing: 4) {
+                Text("State")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Text(state.workState.rawValue)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(state.workState.stateColor)
+                Text(formatSec(state.workStateDuration))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 4) {
                 Text("Risk")
                     .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Text(state.riskLevel.debugLabel)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(state.riskLevel.debugColor)
-            }
-
-            HStack(spacing: 4) {
-                Text("State")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                Text("\(state.workState.symbol) \(state.workState.rawValue)")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(state.workState.stateColor)
-                Text(formatSec(state.workStateDuration))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -247,20 +247,9 @@ private struct DebugPanel: View {
                         .foregroundStyle(scoreColor)
                         .frame(width: 30, alignment: .trailing)
                 }
-                DebugMetric(label: "target", value: String(format: "%.0f%%", state.pressures.target * 100))
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("PRESSURES")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-                PressureRow(label: "off-task",   value: state.pressures.offTask,     isBonus: false)
-                PressureRow(label: "accumulator",value: state.pressures.accumulator,  isBonus: false)
-                PressureRow(label: "scatter",    value: state.pressures.scatter,      isBonus: false)
-                PressureRow(label: "skimming",   value: state.pressures.skimming,     isBonus: false)
-                PressureRow(label: "idle ratio", value: state.pressures.idleRatio,    isBonus: false)
-                PressureRow(label: "streak",     value: state.pressures.streakBonus,  isBonus: true)
+                DebugMetric(label: "quality", value: String(format: "%.0f%%", state.focusQuality * 100))
+                DebugMetric(label: "base",  value: String(format: "%.0f%%", state.workState.baseTargetScore * 100))
+                DebugMetric(label: "floor", value: String(format: "%.0f%%", state.workState.decayFloor * 100))
                 DebugMetric(label: "accumulator", value: formatSec(state.accumulatorSeconds))
             }
 
@@ -328,34 +317,6 @@ private struct DebugRule: View {
     }
 }
 
-private struct PressureRow: View {
-    var label:   String
-    var value:   Double
-    var isBonus: Bool
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(value > 0.01 ? (isBonus ? Color.green : Color.primary) : Color.secondary)
-                .frame(width: 88, alignment: .leading)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.primary.opacity(0.06))
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(isBonus ? Color.green.opacity(0.7) : Color.red.opacity(0.6))
-                        .frame(width: geo.size.width * min(value / (isBonus ? 0.15 : 0.80), 1.0))
-                }
-            }
-            .frame(height: 5)
-            Text(isBonus ? String(format: "+%.0f%%", value * 100) : String(format: "−%.0f%%", value * 100))
-                .font(.system(size: 10, weight: value > 0.01 ? .semibold : .regular, design: .monospaced))
-                .foregroundStyle(value > 0.01 ? (isBonus ? Color.green : Color.red) : Color.secondary)
-                .frame(width: 36, alignment: .trailing)
-        }
-    }
-}
 
 private struct DebugMetric: View {
     var label: String
