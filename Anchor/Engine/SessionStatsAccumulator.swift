@@ -12,22 +12,28 @@ final class SessionStatsAccumulator {
 
     private var interventionTimestamps: [(date: Date, level: Intervention.Level)] = []
     private var focusScoreTimeline:     [(date: Date, score: Double)]             = []
+    private var timeByWorkState:        [String: TimeInterval]                    = [:]
+    private var switchesPerMinuteSamples: [Double]                                = []
 
     func reset() {
-        focusScoreSamples      = []
-        timeInLevel            = [:]
-        offTaskDwellByContext  = [:]
-        longestFocusStreak     = 0
-        interventionCount      = 0
-        escalationCount        = 0
-        interventionTimestamps = []
-        focusScoreTimeline     = []
+        focusScoreSamples        = []
+        timeInLevel              = [:]
+        offTaskDwellByContext    = [:]
+        longestFocusStreak       = 0
+        interventionCount        = 0
+        escalationCount          = 0
+        interventionTimestamps   = []
+        focusScoreTimeline       = []
+        timeByWorkState          = [:]
+        switchesPerMinuteSamples = []
     }
 
     func record(state: EngineState, interval: TimeInterval) {
         focusScoreSamples.append(state.focusScore)
         focusScoreTimeline.append((.now, state.focusScore))
         timeInLevel[state.riskLevel, default: 0] += interval
+        timeByWorkState[state.workState.rawValue, default: 0] += interval
+        switchesPerMinuteSamples.append(state.switchesPerMinute)
 
         if state.isOffTaskContext {
             let ctx = state.currentDomain.isEmpty ? state.currentApp : state.currentDomain
@@ -69,6 +75,10 @@ final class SessionStatsAccumulator {
             .prefix(5)
             .map { SessionSummary.DistractionEntry(context: $0.key, seconds: $0.value) }
 
+        let avgSwitches = switchesPerMinuteSamples.isEmpty
+            ? 0.0
+            : switchesPerMinuteSamples.reduce(0, +) / Double(switchesPerMinuteSamples.count)
+
         return SessionSummary(
             id:              UUID(),
             sessionId:       session.id,
@@ -83,10 +93,12 @@ final class SessionStatsAccumulator {
             timeAtRisk:      timeInLevel[.atRisk] ?? 0,
             timeDrift:       timeInLevel[.drift]  ?? 0,
             offTaskTime:     finalState.totalOffTaskDwell,
-            longestFocusStreak: longestFocusStreak,
-            interventionCount:  interventionCount,
-            escalationCount:    escalationCount,
-            topDistractions:    Array(topDistractions)
+            longestFocusStreak:      longestFocusStreak,
+            interventionCount:       interventionCount,
+            escalationCount:         escalationCount,
+            topDistractions:         Array(topDistractions),
+            timeByWorkState:         timeByWorkState,
+            averageSwitchesPerMinute: avgSwitches
         )
     }
 }

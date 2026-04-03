@@ -67,10 +67,14 @@ final class SessionManager {
         SessionSummaryStore.shared.save(summary)
         lastSummary = summary
 
-        let outcomes = SessionStatsAccumulator.shared.evaluateInterventionOutcomes()
-        var profile  = UserProfileStore.shared.load()
-        UserProfileUpdater.update(profile: &profile, with: summary, interventionOutcomes: outcomes)
-        UserProfileStore.shared.save(profile)
+        let profile           = UserProfileStore.shared.load()
+        let recoveryThreshold = UserProfileTuner.tunedRecoveryThreshold(from: profile)
+        let outcomes          = SessionStatsAccumulator.shared.evaluateInterventionOutcomes(
+            recoveryThreshold: recoveryThreshold
+        )
+        var updatedProfile = profile
+        UserProfileUpdater.update(profile: &updatedProfile, with: summary, interventionOutcomes: outcomes)
+        UserProfileStore.shared.save(updatedProfile)
 
         EventStore.shared.append(
             type: "session_ended",

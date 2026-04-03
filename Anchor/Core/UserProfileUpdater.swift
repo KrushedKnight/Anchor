@@ -23,6 +23,12 @@ enum UserProfileUpdater {
         profile.totalInterventions += summary.interventionCount
         profile.totalEscalations   += summary.escalationCount
 
+        // Behavior baselines
+        for (state, time) in summary.timeByWorkState {
+            profile.totalTimeByWorkState[state, default: 0] += time
+        }
+        profile.totalSwitchesPerMinuteSum += summary.averageSwitchesPerMinute
+
         // Distraction patterns
         for entry in summary.topDistractions {
             profile.distractionDwellByContext[entry.context, default: 0] += entry.seconds

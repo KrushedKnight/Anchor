@@ -18,6 +18,11 @@ struct UserProfile: Codable {
 
     var distractionDwellByContext: [String: Double] = [:]
 
+    // MARK: - Behavior baselines
+
+    var totalTimeByWorkState:        [String: Double] = [:]
+    var totalSwitchesPerMinuteSum:   Double           = 0
+
     // MARK: - Intervention effectiveness
 
     var softInterventionsFired:      Int = 0
@@ -77,6 +82,24 @@ extension UserProfile {
         strongInterventionsFired > 0
             ? Double(strongInterventionsRecovered) / Double(strongInterventionsFired)
             : 0
+    }
+
+    var averageSwitchesPerMinute: Double {
+        totalSessions > 0 ? totalSwitchesPerMinuteSum / Double(totalSessions) : 0
+    }
+
+    var workStateDistribution: [String: Double] {
+        guard totalDuration > 0 else { return [:] }
+        return totalTimeByWorkState.mapValues { $0 / totalDuration }
+    }
+
+    var baselineFocusScore: Double {
+        guard recentSessions.count >= 3 else { return averageFocusScore }
+        let sorted = recentSessions.map(\.focusScoreAvg).sorted()
+        let mid = sorted.count / 2
+        return sorted.count.isMultiple(of: 2)
+            ? (sorted[mid - 1] + sorted[mid]) / 2.0
+            : sorted[mid]
     }
 
     var topDistractions: [(context: String, seconds: Double)] {

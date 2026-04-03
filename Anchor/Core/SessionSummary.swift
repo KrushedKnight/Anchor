@@ -29,5 +29,8 @@ struct SessionSummary: Codable, Identifiable {
 
     var topDistractions: [DistractionEntry]
 
+    var timeByWorkState:          [String: TimeInterval] = [:]
+    var averageSwitchesPerMinute:  Double                 = 0
+
     var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }
 }

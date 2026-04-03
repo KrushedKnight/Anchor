@@ -86,6 +86,7 @@ final class DriftEngine {
             lastSessionId          = currentSessionId
             pendingClassifications = []
             accumulator.reset()
+            applyProfileTuning()
         }
 
         guard let session = SessionManager.shared.activeSession else {
@@ -127,6 +128,13 @@ final class DriftEngine {
             }
             pendingClassifications.remove(app)
         }
+    }
+
+    private func applyProfileTuning() {
+        let profile = UserProfileStore.shared.load()
+        config = UserProfileTuner.tunedRuleConfig(from: profile, base: .defaults)
+        InterventionEngine.shared.config = UserProfileTuner.tunedInterventionConfig(from: profile)
+        print("[DriftEngine] applied profile tuning (sessions=\(profile.totalSessions))")
     }
 
     private func decayAccumulator() {

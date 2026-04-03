@@ -5,7 +5,7 @@ final class InterventionEngine {
 
     private let decisionBus:     DecisionBus
     private let interventionBus: InterventionBus
-    private let config:          InterventionConfig
+    var config:                  InterventionConfig
     private let copyProvider:    NudgeCopyProviding
 
     private var driftCycleStart: Date?
