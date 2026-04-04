@@ -91,9 +91,10 @@ enum UserProfileTuner {
             && productiveSwitchFrac > 0.3
 
         if isProductiveSwitcher {
-            config.noveltySeekingAtRisk = clamp(base.noveltySeekingAtRisk * 1.8, min: 30, max: 120)
-            config.noveltySeekingDrift  = clamp(base.noveltySeekingDrift * 1.5,  min: 60, max: 240)
-            config.stuckCyclingAtRisk   = clamp(base.stuckCyclingAtRisk * 1.5,   min: 120, max: 600)
+            config.noveltySeekingAtRisk = clamp(base.noveltySeekingAtRisk * 1.8, min: 20, max: 90)
+            config.noveltySeekingDrift  = clamp(base.noveltySeekingDrift * 1.5,  min: 45, max: 180)
+            config.stuckCyclingAtRisk   = clamp(base.stuckCyclingAtRisk * 1.5,   min: 30, max: 180)
+            config.stuckCyclingDrift    = clamp(base.stuckCyclingDrift * 1.5,     min: 90, max: 360)
         }
 
         // Drift-prone user: low focus, high atRisk fraction.
@@ -102,9 +103,12 @@ enum UserProfileTuner {
         let isDriftProne = focusAvg < 0.5 && atRiskFrac > 0.20
 
         if isDriftProne {
-            config.noveltySeekingAtRisk = clamp(base.noveltySeekingAtRisk * 0.6, min: 10, max: 60)
-            config.passiveDriftAtRisk   = clamp(base.passiveDriftAtRisk * 0.7,   min: 60, max: 180)
-            config.passiveDriftDrift    = clamp(base.passiveDriftDrift * 0.7,     min: 120, max: 420)
+            config.noveltySeekingAtRisk = clamp(base.noveltySeekingAtRisk * 0.6, min: 10, max: 45)
+            config.noveltySeekingDrift  = clamp(base.noveltySeekingDrift * 0.6,  min: 30, max: 90)
+            config.passiveDriftAtRisk   = clamp(base.passiveDriftAtRisk * 0.7,   min: 20, max: 90)
+            config.passiveDriftDrift    = clamp(base.passiveDriftDrift * 0.7,     min: 60, max: 180)
+            config.stuckCyclingAtRisk   = clamp(base.stuckCyclingAtRisk * 0.7,   min: 20, max: 90)
+            config.stuckCyclingDrift    = clamp(base.stuckCyclingDrift * 0.7,     min: 60, max: 180)
         }
 
         // Deep focus user: mostly in deepFocus state, low switching.
@@ -115,8 +119,8 @@ enum UserProfileTuner {
         let isDeepFocuser = deepFocusFrac > 0.4 && switchAvg < 2.0
 
         if isDeepFocuser {
-            config.passiveDriftAtRisk = clamp(base.passiveDriftAtRisk * 1.4, min: 90, max: 300)
-            config.passiveDriftDrift  = clamp(base.passiveDriftDrift * 1.3,  min: 180, max: 600)
+            config.passiveDriftAtRisk = clamp(base.passiveDriftAtRisk * 1.4, min: 45, max: 180)
+            config.passiveDriftDrift  = clamp(base.passiveDriftDrift * 1.3,  min: 90, max: 360)
         }
 
         return config

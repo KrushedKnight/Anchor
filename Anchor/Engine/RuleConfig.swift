@@ -9,12 +9,17 @@ struct RuleConfig {
     var recoveryDecayRate:          Double          // accumulator seconds removed per on-task second
 
     var stuckCyclingAtRisk:         TimeInterval    // seconds in stuckCycling before atRisk
+    var stuckCyclingDrift:          TimeInterval    // seconds in stuckCycling before drift
     var noveltySeekingAtRisk:       TimeInterval    // seconds in noveltySeeking before atRisk
     var noveltySeekingDrift:        TimeInterval    // seconds in noveltySeeking before drift
     var passiveDriftAtRisk:         TimeInterval    // seconds in passiveDrift before atRisk
     var passiveDriftDrift:          TimeInterval    // seconds in passiveDrift before drift
     var idleAtRisk:                 TimeInterval    // seconds idle before atRisk
+    var idleDrift:                  TimeInterval    // seconds idle before drift
+    var highDwellThreshold:         TimeInterval    // seconds before dwell counts as "high"
     var scoreDecayWindow:           TimeInterval    // seconds over which score decays from base to floor
+    var republishInterval:          TimeInterval    // seconds between re-publishing same risk level
+    var distractionPressureDecay:   TimeInterval    // seconds of on-task needed to fully reset pressure
 
     static let defaults = RuleConfig(
         knownBrowsers: ["Google Chrome", "Firefox", "Safari"],
@@ -22,12 +27,17 @@ struct RuleConfig {
         scatterAppsThreshold:       3,
         dwellSkimmingThreshold:     8,
         recoveryDecayRate:          3.0,
-        stuckCyclingAtRisk:         180,
-        noveltySeekingAtRisk:       30,
-        noveltySeekingDrift:        90,
-        passiveDriftAtRisk:         120,
-        passiveDriftDrift:          300,
+        stuckCyclingAtRisk:         45,
+        stuckCyclingDrift:          120,
+        noveltySeekingAtRisk:       20,
+        noveltySeekingDrift:        60,
+        passiveDriftAtRisk:         45,
+        passiveDriftDrift:          120,
         idleAtRisk:                 30,
-        scoreDecayWindow:           300
+        idleDrift:                  180,
+        highDwellThreshold:         25,
+        scoreDecayWindow:           300,
+        republishInterval:          30,
+        distractionPressureDecay:   60
     )
 }

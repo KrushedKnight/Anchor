@@ -20,7 +20,10 @@ final class DriftEngine {
     private let analyzer:                BehaviorAnalyzer
     private let accumulator:             SessionStatsAccumulator
     private var lastPublishedRiskLevel:  RiskLevel?
+    private var lastPublishedAt:         Date?
     private var pendingClassifications:  Set<String> = []
+    private var distractionPressure:     TimeInterval = 0
+    private var onTaskSinceLastDistraction: TimeInterval = 0
 
     init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared, accumulator: SessionStatsAccumulator = .shared) {
         self.bus         = bus
@@ -47,6 +50,7 @@ final class DriftEngine {
         computeContextFit()
         decayAccumulator()
         updateWorkState(snap)
+        updateDistractionPressure()
         updateFocusScore(snap)
 
         state.totalOffTaskDwell  = liveOffTaskDwell(snap)
@@ -56,7 +60,7 @@ final class DriftEngine {
 
         accumulator.record(state: state, interval: config.evaluationInterval)
 
-        print("[DriftEngine] score=\(String(format: "%.2f", focusScore)) risk=\(state.riskLevel) state=\(state.workState.rawValue) (\(Int(state.workStateDuration))s) pressure=\(state.dominantPressureSource)")
+        print("[DriftEngine] score=\(String(format: "%.2f", focusScore)) risk=\(state.riskLevel) state=\(state.workState.rawValue) (\(Int(state.workStateDuration))s) pressure=\(state.dominantPressureSource) dp=\(Int(distractionPressure))s")
         maybePublish(snap)
     }
 
@@ -85,6 +89,10 @@ final class DriftEngine {
             workStateEnteredAt     = .now
             lastSessionId          = currentSessionId
             pendingClassifications = []
+            distractionPressure    = 0
+            onTaskSinceLastDistraction = 0
+            lastPublishedAt        = nil
+            lastPublishedRiskLevel = nil
             accumulator.reset()
             applyProfileTuning()
         }
@@ -142,6 +150,22 @@ final class DriftEngine {
         offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * state.contextFit * config.evaluationInterval)
     }
 
+    private func updateDistractionPressure() {
+        let isBadState = currentWorkState == .stuckCycling
+            || currentWorkState == .noveltySeeking
+            || currentWorkState == .passiveDrift
+
+        if isBadState {
+            distractionPressure += config.evaluationInterval
+            onTaskSinceLastDistraction = 0
+        } else if currentWorkState == .deepFocus || currentWorkState == .productiveSwitching {
+            onTaskSinceLastDistraction += config.evaluationInterval
+            if onTaskSinceLastDistraction >= config.distractionPressureDecay {
+                distractionPressure = max(0, distractionPressure - config.evaluationInterval)
+            }
+        }
+    }
+
     private func updateWorkState(_ snap: BehaviorSnapshot) {
         let inferred = inferWorkState(from: snap, contextFit: state.contextFit)
 
@@ -157,7 +181,7 @@ final class DriftEngine {
     private func inferWorkState(from snap: BehaviorSnapshot, contextFit: Double) -> WorkState {
         if snap.isIdle { return .idle }
 
-        let highDwell    = snap.dwellInCurrentContext > 60
+        let highDwell    = snap.dwellInCurrentContext > config.highDwellThreshold
         let lowSwitching = snap.switchesPerMinute < 3
         let onTask       = contextFit > 0.7
         let offTask      = contextFit < 0.3
@@ -230,25 +254,31 @@ final class DriftEngine {
     }
 
     private func assessRisk(state ws: WorkState, duration: TimeInterval) -> RiskLevel {
+        let effectiveDuration = duration + distractionPressure
+
         switch ws {
         case .deepFocus, .productiveSwitching:
             return .stable
 
         case .stuckCycling:
-            return duration >= config.stuckCyclingAtRisk ? .atRisk : .stable
+            if effectiveDuration >= config.stuckCyclingDrift  { return .drift }
+            if effectiveDuration >= config.stuckCyclingAtRisk { return .atRisk }
+            return .stable
 
         case .noveltySeeking:
-            if duration >= config.noveltySeekingDrift  { return .drift }
-            if duration >= config.noveltySeekingAtRisk { return .atRisk }
+            if effectiveDuration >= config.noveltySeekingDrift  { return .drift }
+            if effectiveDuration >= config.noveltySeekingAtRisk { return .atRisk }
             return .stable
 
         case .passiveDrift:
-            if duration >= config.passiveDriftDrift  { return .drift }
-            if duration >= config.passiveDriftAtRisk { return .atRisk }
+            if effectiveDuration >= config.passiveDriftDrift  { return .drift }
+            if effectiveDuration >= config.passiveDriftAtRisk { return .atRisk }
             return .stable
 
         case .idle:
-            return duration >= config.idleAtRisk ? .atRisk : .stable
+            if duration >= config.idleDrift  { return .drift }
+            if duration >= config.idleAtRisk { return .atRisk }
+            return .stable
         }
     }
 
@@ -314,7 +344,7 @@ final class DriftEngine {
         }
 
         let gettingWorse = desired.rawValue > state.riskLevel.rawValue
-        let required     = gettingWorse ? 2 : (desired == .stable ? 3 : 4)
+        let required     = gettingWorse ? 1 : (desired == .stable ? 3 : 4)
 
         return pendingTicks >= required ? desired : state.riskLevel
     }
@@ -326,10 +356,17 @@ final class DriftEngine {
 
     private func maybePublish(_ snap: BehaviorSnapshot) {
         guard let bus else { print("[DriftEngine] maybePublish: no bus, skipping"); return }
-        guard state.riskLevel != lastPublishedRiskLevel else { return }
 
-        print("[DriftEngine] publishing decision: \(state.riskLevel)")
+        let levelChanged = state.riskLevel != lastPublishedRiskLevel
+        let stillBad = state.riskLevel != .stable
+        let timeSincePublish = lastPublishedAt.map { Date.now.timeIntervalSince($0) } ?? .infinity
+        let shouldRepublish = stillBad && timeSincePublish >= config.republishInterval
+
+        guard levelChanged || shouldRepublish else { return }
+
+        print("[DriftEngine] publishing decision: \(state.riskLevel) (changed=\(levelChanged) republish=\(shouldRepublish))")
         lastPublishedRiskLevel = state.riskLevel
+        lastPublishedAt = .now
 
         let severity: EngineDecision.Severity = switch state.riskLevel {
             case .stable: .low
