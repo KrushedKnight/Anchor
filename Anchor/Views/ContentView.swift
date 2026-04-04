@@ -246,26 +246,160 @@ private struct CompactAnalyticsTab: View {
         self.summaries = SessionSummaryStore.shared.load()
     }
 
+    private static let minimumSessions = 3
+
     var body: some View {
-        if profile.totalSessions == 0 {
-            VStack(spacing: 8) {
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.title2)
-                    .foregroundStyle(Color.anchorTextMuted)
-                Text("Complete a session to see analytics")
-                    .font(.system(.caption))
-                    .foregroundStyle(Color.anchorTextMuted)
-            }
-            .frame(maxWidth: .infinity, minHeight: 200)
-            .padding(20)
+        if profile.totalSessions < Self.minimumSessions {
+            insufficientDataState
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    archetypeSection
+                    streakAndDayOfWeekRow
                     weeklyChartSection
                     insightsSection
                 }
                 .padding(20)
             }
+        }
+    }
+
+    private var insufficientDataState: some View {
+        let completed = profile.totalSessions
+        let remaining = Self.minimumSessions - completed
+
+        return VStack(spacing: 12) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.title2)
+                .foregroundStyle(Color.anchorTextMuted)
+            Text("Not enough data yet")
+                .font(.system(.caption, weight: .medium))
+            Text(completed == 0
+                ? "Complete a focus session to start building your profile."
+                : "Complete \(remaining) more session\(remaining == 1 ? "" : "s") to unlock analytics.")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
+                .multilineTextAlignment(.center)
+
+            if completed > 0 {
+                HStack(spacing: 4) {
+                    ForEach(0..<Self.minimumSessions, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(i < completed ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.25))
+                            .frame(width: 20, height: 4)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 200)
+        .padding(20)
+    }
+
+    private var archetypeSection: some View {
+        let archetype = profile.focusArchetype
+        return VStack(alignment: .leading, spacing: 6) {
+            SectionHeader("Your Focus Archetype")
+            HStack(spacing: 10) {
+                Image(systemName: archetype.icon)
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color.anchorTerracotta)
+                    .frame(width: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(archetype.rawValue)
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(archetype.description)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.anchorTextMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private var streakAndDayOfWeekRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            streakCard
+            dayOfWeekChart
+        }
+    }
+
+    private var streakCard: some View {
+        let streak = profile.currentStreak
+        return VStack(spacing: 6) {
+            Image(systemName: streak > 0 ? "flame.fill" : "flame")
+                .font(.system(size: 20))
+                .foregroundStyle(streak > 0 ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.4))
+            Text("\(streak)")
+                .font(.system(size: 24, weight: .bold).monospacedDigit())
+            Text("day streak")
+                .font(.system(size: 9))
+                .foregroundStyle(Color.anchorTextMuted)
+        }
+        .frame(width: 80)
+        .padding(.vertical, 12)
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var dayOfWeekChart: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionHeader("Focus by Day")
+
+            let dayData = dayOfWeekData()
+            if dayData.isEmpty {
+                Text("Not enough data yet.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
+                    .frame(height: 80)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Chart(dayData, id: \.weekday) { entry in
+                    BarMark(
+                        x: .value("Day", entry.label),
+                        y: .value("Score", entry.score * 100)
+                    )
+                    .foregroundStyle(barColor(for: entry.score))
+                    .cornerRadius(3)
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis {
+                    AxisMarks(values: [0, 50, 100]) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let v = value.as(Int.self) { Text("\(v)%").font(.system(size: 8)) }
+                        }
+                    }
+                }
+                .frame(height: 80)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private struct DayEntry {
+        var weekday: Int
+        var label: String
+        var score: Double
+    }
+
+    private func dayOfWeekData() -> [DayEntry] {
+        let calendar = Calendar.current
+        let symbols = calendar.shortWeekdaySymbols
+
+        var scoreSums: [Int: Double] = [:]
+        var counts: [Int: Int] = [:]
+
+        for session in profile.recentSessions {
+            let wd = calendar.component(.weekday, from: session.date)
+            scoreSums[wd, default: 0] += session.focusScoreAvg
+            counts[wd, default: 0] += 1
+        }
+
+        return counts.keys.sorted().map { wd in
+            DayEntry(
+                weekday: wd,
+                label: symbols[wd - 1],
+                score: scoreSums[wd, default: 0] / Double(counts[wd, default: 1])
+            )
         }
     }
 

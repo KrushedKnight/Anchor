@@ -54,19 +54,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isMovableByWindowBackground  = true
         panel.collectionBehavior           = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
+        let panelSize = NSSize(width: 240, height: 140)
+
         let hosting = NSHostingView(rootView: WidgetView())
-        hosting.setFrameSize(hosting.fittingSize)
         hosting.wantsLayer = true
-        hosting.layer?.cornerRadius = 12
-        hosting.layer?.masksToBounds = true
         panel.contentView = hosting
-        panel.setContentSize(hosting.fittingSize)
+        panel.setContentSize(panelSize)
 
         if let screen = NSScreen.main {
-            let size = hosting.fittingSize
             panel.setFrameOrigin(NSPoint(
-                x: screen.visibleFrame.maxX - size.width - 16,
-                y: screen.visibleFrame.maxY - size.height - 16
+                x: screen.visibleFrame.maxX - panelSize.width - 16,
+                y: screen.visibleFrame.maxY - panelSize.height - 16
             ))
         }
 

@@ -20,6 +20,8 @@ struct AnalyticsView: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         headerStats
+                        archetypeSection
+                        streakAndDayOfWeekRow
                         focusTrendSection
                         bestHoursSection
                         sessionHistorySection
@@ -93,6 +95,115 @@ struct AnalyticsView: View {
                 label: "Avg Session",
                 value: formatDuration(profile.averageSessionMinutes * 60),
                 icon: "timer"
+            )
+        }
+    }
+
+    // MARK: - Archetype
+
+    private var archetypeSection: some View {
+        let archetype = profile.focusArchetype
+        return AnalyticsCard(title: "Your Focus Archetype", subtitle: archetype.rawValue) {
+            HStack(spacing: 16) {
+                Image(systemName: archetype.icon)
+                    .font(.system(size: 36))
+                    .foregroundStyle(Color.anchorTerracotta)
+                    .frame(width: 56)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(archetype.rawValue)
+                        .font(.title3.weight(.semibold))
+                    Text(archetype.description)
+                        .font(.callout)
+                        .foregroundStyle(Color.anchorTextMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Streak & Day-of-Week
+
+    private var streakAndDayOfWeekRow: some View {
+        HStack(spacing: 16) {
+            streakCard
+            dayOfWeekSection
+        }
+    }
+
+    private var streakCard: some View {
+        let streak = profile.currentStreak
+        return VStack(spacing: 10) {
+            Image(systemName: streak > 0 ? "flame.fill" : "flame")
+                .font(.system(size: 32))
+                .foregroundStyle(streak > 0 ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.4))
+            Text("\(streak)")
+                .font(.system(size: 36, weight: .bold).monospacedDigit())
+            Text(streak == 1 ? "day streak" : "day streak")
+                .font(.caption)
+                .foregroundStyle(Color.anchorTextMuted)
+        }
+        .frame(maxWidth: 140, maxHeight: .infinity)
+        .padding(.vertical, 16)
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var dayOfWeekSection: some View {
+        AnalyticsCard(title: "Focus by Day", subtitle: "Average score") {
+            let dayData = dayOfWeekData()
+            if dayData.isEmpty {
+                Text("Not enough data yet.")
+                    .foregroundStyle(Color.anchorTextMuted)
+                    .frame(height: 120)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Chart(dayData, id: \.weekday) { entry in
+                    BarMark(
+                        x: .value("Day", entry.label),
+                        y: .value("Score", entry.score * 100)
+                    )
+                    .foregroundStyle(barColor(for: entry.score))
+                    .cornerRadius(4)
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis {
+                    AxisMarks(values: [0, 50, 100]) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let v = value.as(Int.self) { Text("\(v)%") }
+                        }
+                    }
+                }
+                .frame(height: 120)
+            }
+        }
+    }
+
+    private struct DayEntry {
+        var weekday: Int
+        var label: String
+        var score: Double
+    }
+
+    private func dayOfWeekData() -> [DayEntry] {
+        let calendar = Calendar.current
+        let symbols = calendar.shortWeekdaySymbols
+
+        var scoreSums: [Int: Double] = [:]
+        var counts: [Int: Int] = [:]
+
+        for session in profile.recentSessions {
+            let wd = calendar.component(.weekday, from: session.date)
+            scoreSums[wd, default: 0] += session.focusScoreAvg
+            counts[wd, default: 0] += 1
+        }
+
+        return counts.keys.sorted().map { wd in
+            DayEntry(
+                weekday: wd,
+                label: symbols[wd - 1],
+                score: scoreSums[wd, default: 0] / Double(counts[wd, default: 1])
             )
         }
     }

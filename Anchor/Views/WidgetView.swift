@@ -4,26 +4,62 @@ struct WidgetView: View {
     var engine         = DriftEngine.shared
     var sessionManager = SessionManager.shared
 
+    @State private var isHovered = false
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            content
+            ZStack(alignment: .topTrailing) {
+                Color.clear
+                if isHovered { expandedContent } else { collapsedContent }
+            }
+            .frame(width: 240, height: 140)
+        }
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                isHovered = hovering
+            }
         }
         .preferredColorScheme(.light)
     }
 
-    // MARK: - Focus State Mapping
+    // MARK: - Focus Tier
 
     private var focusTier: FocusTier {
-        switch engine.state.riskLevel {
-        case .stable: .lockedIn
-        case .atRisk: .drifting
-        case .drift:  .offTask
+        switch engine.state.workState {
+        case .deepFocus, .productiveSwitching: .lockedIn
+        case .stuckCycling, .noveltySeeking:   .drifting
+        case .passiveDrift, .idle:             .offTask
         }
     }
 
-    // MARK: - Content
+    // MARK: - Collapsed (Pill)
 
-    private var content: some View {
+    private var collapsedContent: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(focusTier.dotColor)
+                .frame(width: 7, height: 7)
+            Text(focusTier.label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(focusTier.textColor)
+            Text("·")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.widgetSeparator)
+            Text(elapsedFormatted)
+                .font(.system(size: 11, weight: .medium, design: .serif))
+                .foregroundStyle(Color.widgetAppName)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color.anchorLinen)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.widgetBorder, lineWidth: 1))
+        .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
+    }
+
+    // MARK: - Expanded (Full)
+
+    private var expandedContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             topRow
             taskName
@@ -39,9 +75,10 @@ struct WidgetView: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Color.widgetBorder, lineWidth: 1)
         )
+        .transition(.scale(scale: 0.95, anchor: .topTrailing).combined(with: .opacity))
     }
 
-    // MARK: - Top Row
+    // MARK: - Expanded Subviews
 
     private var topRow: some View {
         HStack(spacing: 6) {
@@ -62,8 +99,6 @@ struct WidgetView: View {
         }
     }
 
-    // MARK: - Task Name
-
     private var taskName: some View {
         Text(sessionManager.activeSession?.taskTitle ?? "Focus")
             .font(.system(size: 20, design: .serif))
@@ -71,8 +106,6 @@ struct WidgetView: View {
             .lineLimit(2)
             .truncationMode(.tail)
     }
-
-    // MARK: - Progress Bar
 
     private var progressBar: some View {
         GeometryReader { geo in
@@ -82,13 +115,12 @@ struct WidgetView: View {
                 Capsule()
                     .fill(focusTier.dotColor)
                     .frame(width: max(4, geo.size.width * engine.state.focusScore))
-                    .animation(.easeInOut(duration: 0.6), value: engine.state.focusScore)
             }
         }
         .frame(height: 5)
+        .animation(.easeInOut(duration: 0.6), value: engine.state.focusScore)
+        .animation(.easeInOut(duration: 0.4), value: engine.state.workState.rawValue)
     }
-
-    // MARK: - Footer Row
 
     private var footerRow: some View {
         HStack {
@@ -132,17 +164,17 @@ private enum FocusTier {
 
     var dotColor: Color {
         switch self {
-        case .lockedIn: Color(red: 0.353, green: 0.541, blue: 0.353)   // #5A8A5A
-        case .drifting: Color(red: 0.910, green: 0.627, blue: 0.188)   // #E8A030
-        case .offTask:  Color(red: 0.753, green: 0.353, blue: 0.208)   // #C05A35
+        case .lockedIn: Color(red: 0.353, green: 0.541, blue: 0.353)
+        case .drifting: Color(red: 0.910, green: 0.627, blue: 0.188)
+        case .offTask:  Color(red: 0.753, green: 0.353, blue: 0.208)
         }
     }
 
     var textColor: Color {
         switch self {
-        case .lockedIn: Color(red: 0.227, green: 0.420, blue: 0.227)   // #3A6B3A
-        case .drifting: Color(red: 0.722, green: 0.471, blue: 0.125)   // #B87820
-        case .offTask:  Color(red: 0.600, green: 0.235, blue: 0.114)   // #993C1D
+        case .lockedIn: Color(red: 0.227, green: 0.420, blue: 0.227)
+        case .drifting: Color(red: 0.722, green: 0.471, blue: 0.125)
+        case .offTask:  Color(red: 0.600, green: 0.235, blue: 0.114)
         }
     }
 }
@@ -150,10 +182,10 @@ private enum FocusTier {
 // MARK: - Widget Colors
 
 private extension Color {
-    static let widgetBorder    = Color(red: 0.894, green: 0.851, blue: 0.784)   // #E4D9C8
-    static let widgetSeparator = Color(red: 0.761, green: 0.659, blue: 0.510)   // #C2A882
-    static let widgetAppName   = Color(red: 0.549, green: 0.451, blue: 0.333)   // #8C7355
-    static let widgetTaskText  = Color(red: 0.110, green: 0.086, blue: 0.071)   // #1C1612
+    static let widgetBorder    = Color(red: 0.894, green: 0.851, blue: 0.784)
+    static let widgetSeparator = Color(red: 0.761, green: 0.659, blue: 0.510)
+    static let widgetAppName   = Color(red: 0.549, green: 0.451, blue: 0.333)
+    static let widgetTaskText  = Color(red: 0.110, green: 0.086, blue: 0.071)
 }
 
 // MARK: - End Session Button
@@ -162,15 +194,15 @@ private struct WidgetEndButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 11))
-            .foregroundStyle(Color.widgetAppName)
+            .foregroundStyle(Color.widgetAppName.opacity(0.5))
             .padding(.vertical, 3)
             .padding(.horizontal, 9)
-            .background(Color(red: 0.949, green: 0.929, blue: 0.890))  // #F2EDE3
+            .background(Color(red: 0.949, green: 0.929, blue: 0.890).opacity(0.6))
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.widgetBorder, lineWidth: 1)
+                    .stroke(Color.widgetBorder.opacity(0.5), lineWidth: 1)
             )
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .opacity(configuration.isPressed ? 0.5 : 1)
     }
 }
