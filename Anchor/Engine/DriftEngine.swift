@@ -26,6 +26,8 @@ final class DriftEngine {
     private var onTaskSinceLastDistraction: TimeInterval = 0
     private var sustainedRecoveryStart:  Date?
     private var isRecoverySuppressed:    Bool = false
+    private var browserOffTaskDwell:     TimeInterval = 0
+    private var lastDomainWasOffTask:    Bool = false
 
     init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared, accumulator: SessionStatsAccumulator = .shared) {
         self.bus         = bus
@@ -67,12 +69,30 @@ final class DriftEngine {
     }
 
     private func syncState(from snap: BehaviorSnapshot) {
-        if snap.currentApp != state.currentApp || snap.currentDomain != state.currentDomain {
+        let appChanged    = snap.currentApp != state.currentApp
+        let domainChanged = snap.currentDomain != state.currentDomain
+
+        if appChanged || domainChanged {
             let offTaskWeight = 1.0 - state.contextFit
             if offTaskWeight > 0 {
                 offTaskAccumulator += state.dwellInCurrentContext * offTaskWeight
             }
         }
+
+        let isBrowser = config.knownBrowsers.contains(snap.currentApp)
+
+        if appChanged && !isBrowser {
+            browserOffTaskDwell  = 0
+            lastDomainWasOffTask = false
+        }
+
+        if isBrowser && domainChanged {
+            if lastDomainWasOffTask {
+                browserOffTaskDwell += state.dwellInCurrentContext
+            }
+            lastDomainWasOffTask = state.contextFit < 0.5
+        }
+
         state.currentApp            = snap.currentApp
         state.currentDomain         = snap.currentDomain
         state.isIdle                = snap.isIdle
@@ -97,6 +117,8 @@ final class DriftEngine {
             lastPublishedRiskLevel = nil
             sustainedRecoveryStart = nil
             isRecoverySuppressed   = false
+            browserOffTaskDwell    = 0
+            lastDomainWasOffTask   = false
             accumulator.reset()
             applyProfileTuning()
         }
@@ -191,7 +213,7 @@ final class DriftEngine {
     }
 
     private func decayAccumulator() {
-        guard !state.isIdle && state.contextFit > 0.5 && offTaskAccumulator > 0 else { return }
+        guard !state.isIdle && state.contextFit > 0.7 && offTaskAccumulator > 0 else { return }
         offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * state.contextFit * config.evaluationInterval)
     }
 
@@ -288,9 +310,9 @@ final class DriftEngine {
         let target = targetScore(for: ws, duration: duration, quality: quality)
         let diff   = target - focusScore
         if diff < 0 {
-            focusScore += max(diff, -0.05)
+            focusScore += max(diff, -0.06)
         } else {
-            focusScore += min(diff, 0.08)
+            focusScore += min(diff, 0.06)
         }
         focusScore = max(0.0, min(1.0, focusScore))
         state.focusScore = focusScore
@@ -299,25 +321,39 @@ final class DriftEngine {
     }
 
     private func assessRisk(state ws: WorkState, duration: TimeInterval) -> RiskLevel {
-        let effectiveDuration = duration + distractionPressure
+        let effectiveDuration = duration + distractionPressure + browserOffTaskDwell
+
+        let compoundMultiplier: Double = {
+            let sessionInterventions = SessionStatsAccumulator.shared.interventionCount
+            let scoreLow = focusScore < 0.5
+            let alreadyWarned = sessionInterventions > 0
+
+            if scoreLow && alreadyWarned {
+                return 0.5
+            }
+            if scoreLow || alreadyWarned {
+                return 0.75
+            }
+            return 1.0
+        }()
 
         switch ws {
         case .deepFocus, .productiveSwitching:
             return .stable
 
         case .stuckCycling:
-            if effectiveDuration >= config.stuckCyclingDrift  { return .drift }
-            if effectiveDuration >= config.stuckCyclingAtRisk { return .atRisk }
+            if effectiveDuration >= config.stuckCyclingDrift * compoundMultiplier  { return .drift }
+            if effectiveDuration >= config.stuckCyclingAtRisk * compoundMultiplier { return .atRisk }
             return .stable
 
         case .noveltySeeking:
-            if effectiveDuration >= config.noveltySeekingDrift  { return .drift }
-            if effectiveDuration >= config.noveltySeekingAtRisk { return .atRisk }
+            if effectiveDuration >= config.noveltySeekingDrift * compoundMultiplier  { return .drift }
+            if effectiveDuration >= config.noveltySeekingAtRisk * compoundMultiplier { return .atRisk }
             return .stable
 
         case .passiveDrift:
-            if effectiveDuration >= config.passiveDriftDrift  { return .drift }
-            if effectiveDuration >= config.passiveDriftAtRisk { return .atRisk }
+            if effectiveDuration >= config.passiveDriftDrift * compoundMultiplier  { return .drift }
+            if effectiveDuration >= config.passiveDriftAtRisk * compoundMultiplier { return .atRisk }
             return .stable
 
         case .idle:

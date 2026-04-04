@@ -27,7 +27,7 @@ enum WorkState: String {
         case .stuckCycling:        0.60
         case .noveltySeeking:      0.40
         case .passiveDrift:        0.35
-        case .idle:                0.70
+        case .idle:                0.50
         }
     }
 
@@ -38,7 +38,7 @@ enum WorkState: String {
         case .stuckCycling:        0.40
         case .noveltySeeking:      0.15
         case .passiveDrift:        0.10
-        case .idle:                0.55
+        case .idle:                0.35
         }
     }
 }

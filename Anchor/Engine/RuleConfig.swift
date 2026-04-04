@@ -28,7 +28,7 @@ struct RuleConfig {
         evaluationInterval:         2,
         scatterAppsThreshold:       3,
         dwellSkimmingThreshold:     8,
-        recoveryDecayRate:          3.0,
+        recoveryDecayRate:          1.5,
         stuckCyclingAtRisk:         45,
         stuckCyclingDrift:          120,
         noveltySeekingAtRisk:       20,
