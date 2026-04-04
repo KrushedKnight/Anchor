@@ -55,7 +55,7 @@ struct WidgetView: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.primary.opacity(0.08))
+                    .fill(Color.anchorSand)
                 Capsule()
                     .fill(stateColor)
                     .frame(width: max(4, geo.size.width * engine.state.focusScore))
@@ -80,9 +80,9 @@ struct WidgetView: View {
 
     private var appDotColor: Color {
         let fit = engine.state.contextFit
-        if fit >= 0.8 { return .green }
-        if fit >= 0.4 { return .yellow }
-        return .red
+        if fit >= 0.8 { return Color.anchorSage }
+        if fit >= 0.4 { return Color.anchorAmber }
+        return Color(red: 0.78, green: 0.29, blue: 0.25)
     }
 
     private var elapsedFormatted: String {

@@ -40,11 +40,11 @@ struct AnalyticsView: View {
         VStack(spacing: 12) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("No sessions yet")
+                .foregroundStyle(Color.anchorTerracotta)
+            Text("Nothing here yet")
                 .font(.title2.weight(.medium))
-            Text("Complete a focus session to see your analytics.")
-                .foregroundStyle(.secondary)
+            Text("Complete a focus session to see your story unfold.")
+                .foregroundStyle(Color.anchorTextMuted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -87,21 +87,21 @@ struct AnalyticsView: View {
                             x: .value("Session", index + 1),
                             y: .value("Focus", session.focusScoreAvg * 100)
                         )
-                        .foregroundStyle(.blue.gradient)
+                        .foregroundStyle(Color.anchorTerracotta.gradient)
                         .interpolationMethod(.catmullRom)
 
                         AreaMark(
                             x: .value("Session", index + 1),
                             y: .value("Focus", session.focusScoreAvg * 100)
                         )
-                        .foregroundStyle(.blue.opacity(0.08))
+                        .foregroundStyle(Color.anchorTerracotta.opacity(0.08))
                         .interpolationMethod(.catmullRom)
 
                         PointMark(
                             x: .value("Session", index + 1),
                             y: .value("Focus", session.focusScoreAvg * 100)
                         )
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.anchorTerracotta)
                         .symbolSize(30)
                     }
                 }
@@ -118,7 +118,7 @@ struct AnalyticsView: View {
                 .frame(height: 200)
             } else {
                 Text("Need at least 2 sessions to show a trend.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 100)
                     .frame(maxWidth: .infinity)
             }
@@ -139,7 +139,7 @@ struct AnalyticsView: View {
             let hourData = bestHourData()
             if hourData.isEmpty {
                 Text("Not enough data yet — keep going.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 80)
                     .frame(maxWidth: .infinity)
             } else {
@@ -153,7 +153,7 @@ struct AnalyticsView: View {
                     .annotation(position: .trailing) {
                         Text("\(Int(entry.score * 100))%")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.anchorTextMuted)
                     }
                 }
                 .chartXScale(domain: 0...100)
@@ -189,7 +189,7 @@ struct AnalyticsView: View {
         AnalyticsCard(title: "Recent Sessions", subtitle: "\(profile.recentSessions.count) sessions") {
             if profile.recentSessions.isEmpty {
                 Text("No sessions recorded yet.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 80)
                     .frame(maxWidth: .infinity)
             } else {
@@ -224,8 +224,8 @@ struct AnalyticsView: View {
         AnalyticsCard(title: "Where You Drift", subtitle: "Top distractions by time") {
             let distractions = profile.topDistractions.prefix(5)
             if distractions.isEmpty {
-                Text("No distractions recorded — nice.")
-                    .foregroundStyle(.secondary)
+                Text("No distractions recorded. Nice work.")
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 80)
                     .frame(maxWidth: .infinity)
             } else {
@@ -238,7 +238,7 @@ struct AnalyticsView: View {
                             Spacer()
                             Text(formatDuration(entry.seconds))
                                 .font(.body.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.anchorTextMuted)
                         }
                         .padding(.vertical, 4)
                     }
@@ -253,8 +253,8 @@ struct AnalyticsView: View {
         AnalyticsCard(title: "How You Work", subtitle: "Time distribution across work states") {
             let slices = workStateSlices()
             if slices.isEmpty {
-                Text("No work state data yet.")
-                    .foregroundStyle(.secondary)
+                Text("Keep going — patterns emerge over time.")
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 80)
                     .frame(maxWidth: .infinity)
             } else {
@@ -281,7 +281,7 @@ struct AnalyticsView: View {
                                 Spacer()
                                 Text("\(Int(slice.fraction * 100))%")
                                     .font(.callout.monospacedDigit())
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.anchorTextMuted)
                             }
                         }
                     }
@@ -336,7 +336,7 @@ struct AnalyticsView: View {
                 }
                 if profile.softInterventionsFired == 0 && profile.strongInterventionsFired == 0 {
                     Text("No nudges fired yet.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.anchorTextMuted)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -366,9 +366,9 @@ struct AnalyticsView: View {
     }
 
     private func barColor(for score: Double) -> Color {
-        if score >= 0.7 { return .green }
-        if score >= 0.4 { return .yellow }
-        return .red
+        if score >= 0.7 { return .anchorSage }
+        if score >= 0.4 { return .anchorAmber }
+        return Color(red: 0.78, green: 0.29, blue: 0.25)
     }
 
     private func cleanContextLabel(_ context: String) -> String {
@@ -397,16 +397,16 @@ private struct StatCard: View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.anchorTerracotta)
             Text(value)
                 .font(.title2.weight(.semibold).monospacedDigit())
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.anchorTextMuted)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -424,14 +424,14 @@ private struct AnalyticsCard<Content: View>: View {
                     Spacer()
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.anchorTextMuted)
                 }
             }
             content()
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -458,14 +458,14 @@ private struct NudgeRing: View {
                 .font(.caption)
             Text("\(count) sent")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.anchorTextMuted)
         }
     }
 
     private var ringColor: Color {
-        if rate >= 0.6 { return .green }
-        if rate >= 0.3 { return .yellow }
-        return .red
+        if rate >= 0.6 { return .anchorSage }
+        if rate >= 0.3 { return .anchorAmber }
+        return Color(red: 0.78, green: 0.29, blue: 0.25)
     }
 }
 

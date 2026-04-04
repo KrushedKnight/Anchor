@@ -11,12 +11,12 @@ enum WorkState: String {
 
     var stateColor: Color {
         switch self {
-        case .deepFocus:           .green
-        case .productiveSwitching: .blue
-        case .stuckCycling:        .yellow
-        case .noveltySeeking:      .orange
-        case .passiveDrift:        .red
-        case .idle:                .secondary
+        case .deepFocus:           Color.anchorSage
+        case .productiveSwitching: Color.anchorSage.opacity(0.75)
+        case .stuckCycling:        Color.anchorAmber
+        case .noveltySeeking:      Color.anchorAmber
+        case .passiveDrift:        Color(red: 0.78, green: 0.29, blue: 0.25)
+        case .idle:                Color.secondary
         }
     }
 

@@ -17,8 +17,9 @@ struct ContentView: View {
                 TabRootView()
             }
         }
-        .frame(width: 300)
-        .background(VisualEffect().ignoresSafeArea())
+        .frame(width: 420)
+        .background(Color.anchorLinen.ignoresSafeArea())
+        .preferredColorScheme(.light)
         .onChange(of: sessionManager.isActive) { _, active in
             if active {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -54,27 +55,57 @@ private enum AppTab: String, CaseIterable {
     }
 }
 
+private struct AnchorTabBar: View {
+    @Binding var selected: AppTab
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(AppTab.allCases, id: \.self) { tab in
+                Button(action: { withAnimation(.easeInOut(duration: 0.18)) { selected = tab } }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: tab.icon).font(.system(size: 11))
+                        Text(tab.rawValue).font(.system(size: 12, weight: selected == tab ? .medium : .regular))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(
+                        Group {
+                            if selected == tab {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.anchorLinen)
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.anchorBorder, lineWidth: 1))
+                            }
+                        }
+                    )
+                    .foregroundStyle(selected == tab ? Color.anchorTerracotta : Color.anchorTextMuted)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 9))
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 6)
+    }
+}
+
 private struct TabRootView: View {
     @State private var selectedTab: AppTab = .home
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $selectedTab) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
-                    Label(tab.rawValue, systemImage: tab.icon).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
-            Divider()
+            AnchorTabBar(selected: $selectedTab)
 
             switch selectedTab {
-            case .home:      HomeTab()
-            case .analytics: CompactAnalyticsTab()
-            case .settings:  SettingsTab()
+            case .home:
+                HomeTab()
+                    .transition(.opacity)
+            case .analytics:
+                CompactAnalyticsTab()
+                    .transition(.opacity)
+            case .settings:
+                SettingsTab()
+                    .transition(.opacity)
             }
         }
     }
@@ -93,14 +124,15 @@ private struct HomeTab: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("What are you working on?")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(.caption))
+                    .foregroundStyle(Color.anchorTextMuted)
                 TextField("e.g. Build the login flow", text: $taskTitle)
                     .textFieldStyle(.plain)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.body))
                     .padding(10)
-                    .background(Color.primary.opacity(0.06))
-                    .cornerRadius(8)
+                    .background(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.anchorBorder, lineWidth: 1.5))
+                    .cornerRadius(10)
                     .onSubmit { startSession() }
                     .onChange(of: taskTitle) { _, newValue in
                         scheduleClassification(for: newValue)
@@ -111,7 +143,7 @@ private struct HomeTab: View {
                 ClassificationPreview(classifications: classifications, isLoading: isClassifying)
             }
 
-            Button("Start Session") { startSession() }
+            Button("Drop Anchor") { startSession() }
                 .buttonStyle(AnchorPrimaryButtonStyle())
 
             recentSessionsList
@@ -125,9 +157,7 @@ private struct HomeTab: View {
         let sessions = Array(SessionSummaryStore.shared.load().prefix(5))
         if !sessions.isEmpty {
             Divider()
-            Text("RECENT")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+            SectionHeader("Recent Sessions")
             VStack(spacing: 0) {
                 ForEach(sessions) { session in
                     RecentSessionRow(session: session)
@@ -184,19 +214,20 @@ private struct RecentSessionRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.anchorText)
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     Text(session.startedAt, style: .relative)
                     Text("·")
                     Text(formatDuration(session.duration))
                 }
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 9))
+                .foregroundStyle(Color.anchorTextMuted)
             }
             Spacer()
             Text(String(format: "%.0f%%", session.focusScoreAvg * 100))
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(scoreColor(for: session.focusScoreAvg))
         }
         .padding(.vertical, 6)
@@ -219,10 +250,10 @@ private struct CompactAnalyticsTab: View {
             VStack(spacing: 8) {
                 Image(systemName: "chart.bar.xaxis")
                     .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                 Text("Complete a session to see analytics")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(.caption))
+                    .foregroundStyle(Color.anchorTextMuted)
             }
             .frame(maxWidth: .infinity, minHeight: 200)
             .padding(20)
@@ -239,15 +270,13 @@ private struct CompactAnalyticsTab: View {
 
     private var weeklyChartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("THIS WEEK")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+            SectionHeader("This Week")
 
             let data = weekData()
             if data.allSatisfy({ $0.totalMinutes == 0 }) {
                 Text("No sessions this week")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 100)
                     .frame(maxWidth: .infinity)
             } else {
@@ -260,20 +289,19 @@ private struct CompactAnalyticsTab: View {
                     .cornerRadius(3)
                 }
                 .chartYAxisLabel("min")
-                .frame(height: 120)
+                .frame(height: 160)
             }
         }
     }
 
     private var insightsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("INSIGHTS")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+            SectionHeader("Insights")
 
             ForEach(Array(generateInsights().enumerated()), id: \.offset) { _, insight in
                 Text(insight)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.anchorText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -350,9 +378,9 @@ private struct CompactAnalyticsTab: View {
     }
 
     private func barColor(for score: Double) -> Color {
-        if score >= 0.7 { return .green }
-        if score >= 0.4 { return .yellow }
-        return .red
+        if score >= 0.7 { return .anchorSage }
+        if score >= 0.4 { return .anchorAmber }
+        return Color(red: 0.78, green: 0.29, blue: 0.25)
     }
 
     private func formatInsightDuration(_ seconds: Double) -> String {
@@ -395,9 +423,7 @@ private struct SettingsTab: View {
 
     private var observersSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("OBSERVERS")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+            SectionHeader("Observers")
 
             ObserverToggle(label: "App Tracking", enabled: .constant(true), locked: true)
 
@@ -429,12 +455,10 @@ private struct SettingsTab: View {
 
     private var debugSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("DEBUG")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+            SectionHeader("Under the Hood")
 
             Button("Open Debug Panel") { showDebug = true }
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 11))
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.accentColor)
         }
@@ -449,12 +473,13 @@ private struct ObserverToggle: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 11))
+                .foregroundStyle(Color.anchorText)
             Spacer()
             if locked {
                 Text("always on")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.anchorTextMuted)
             } else {
                 Toggle("", isOn: $enabled)
                     .toggleStyle(.switch)
@@ -475,14 +500,14 @@ private struct ActiveSessionCompactView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Circle().fill(.green).frame(width: 7, height: 7)
-                        Text("Session active")
-                            .font(.system(.caption, design: .monospaced).weight(.semibold))
+                        Circle().fill(Color.anchorSage).frame(width: 7, height: 7)
+                        Text("You're anchored")
+                            .font(.system(.caption).weight(.semibold))
                     }
                     if let session = sessionManager.activeSession {
                         Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.anchorTextMuted)
                     }
                 }
                 Spacer()
@@ -491,16 +516,16 @@ private struct ActiveSessionCompactView: View {
             HStack(spacing: 6) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.primary.opacity(0.08))
-                        RoundedRectangle(cornerRadius: 2)
+                        Capsule()
+                            .fill(Color.anchorSand)
+                        Capsule()
                             .fill(engine.state.riskLevel.color)
                             .frame(width: geo.size.width * engine.state.focusScore)
                     }
                 }
-                .frame(height: 6)
+                .frame(height: 5)
                 Text(String(format: "%.0f%%", engine.state.focusScore * 100))
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(engine.state.riskLevel.color)
                     .frame(width: 34, alignment: .trailing)
             }
@@ -508,23 +533,23 @@ private struct ActiveSessionCompactView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(engine.state.workState.rawValue)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(engine.state.workState.stateColor)
                     Text("state")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 8))
+                        .foregroundStyle(Color.anchorTextMuted)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(engine.state.riskLevel.label)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(engine.state.riskLevel.color)
                     Text("risk")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 8))
+                        .foregroundStyle(Color.anchorTextMuted)
                 }
             }
 
-            Button("End Session") { SessionManager.shared.end() }
+            Button("Wrap Up") { SessionManager.shared.end() }
                 .buttonStyle(AnchorDestructiveButtonStyle())
         }
         .padding(20)
@@ -556,7 +581,7 @@ private struct DebugSheet: View {
                     .padding(16)
             }
         }
-        .frame(width: 320, height: 500)
+        .frame(width: 400, height: 540)
     }
 }
 
@@ -667,8 +692,8 @@ private struct ClassificationPreview: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Text("App Classification")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(.caption))
+                    .foregroundStyle(Color.anchorTextMuted)
                 if isLoading {
                     ProgressView()
                         .scaleEffect(0.5)
@@ -676,13 +701,13 @@ private struct ClassificationPreview: View {
                 }
             }
             if !onTask.isEmpty {
-                ClassificationRow(label: "on-task", apps: onTask, color: .green)
+                ClassificationRow(label: "on-task", apps: onTask, color: .anchorSage)
             }
             if !ambiguous.isEmpty {
-                ClassificationRow(label: "neutral", apps: ambiguous, color: .yellow)
+                ClassificationRow(label: "neutral", apps: ambiguous, color: .anchorAmber)
             }
             if !offTask.isEmpty {
-                ClassificationRow(label: "distractor", apps: offTask, color: .red)
+                ClassificationRow(label: "distractor", apps: offTask, color: Color(red: 0.78, green: 0.29, blue: 0.25))
             }
         }
     }
@@ -700,8 +725,8 @@ private struct ClassificationRow: View {
                 .frame(width: 6, height: 6)
                 .padding(.top, 4)
             Text("\(label): \(apps.joined(separator: ", "))")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
                 .lineLimit(2)
         }
     }
@@ -717,9 +742,7 @@ private struct ProviderSettingsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("AI PROVIDER")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+            SectionHeader("AI Brain")
 
             HStack(spacing: 6) {
                 ForEach(APIProvider.allCases) { provider in
@@ -750,11 +773,11 @@ private struct ProviderPickerStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .font(.system(size: 9, weight: .medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isSelected ? Color.accentColor : Color.primary.opacity(0.07))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .background(isSelected ? Color.anchorTerracotta : Color.primary.opacity(0.07))
+            .foregroundStyle(isSelected ? Color.white : Color.anchorText)
             .cornerRadius(4)
     }
 }
@@ -769,10 +792,10 @@ private struct APIKeyField: View {
             HStack(spacing: 6) {
                 Text("●●●●●●●●●●●●")
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                 Spacer()
                 Button("clear") { store.clear(for: provider) }
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 9))
                     .buttonStyle(.plain)
                     .foregroundStyle(.red)
             }
@@ -780,15 +803,16 @@ private struct APIKeyField: View {
             HStack(spacing: 6) {
                 SecureField(provider.placeholder, text: $keyInput)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 10))
                     .padding(5)
-                    .background(Color.primary.opacity(0.06))
-                    .cornerRadius(4)
+                    .background(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
+                    .cornerRadius(8)
                     .onSubmit { save() }
                 Button("save") { save() }
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 9))
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.anchorTerracotta)
                     .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
@@ -811,36 +835,38 @@ private struct OllamaConfigFields: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("endpoint")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(width: 60, alignment: .leading)
                 TextField("http://localhost:11434", text: $endpoint)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 10))
                     .padding(5)
-                    .background(Color.primary.opacity(0.06))
-                    .cornerRadius(4)
+                    .background(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
+                    .cornerRadius(8)
                     .onSubmit { save() }
             }
 
             HStack {
                 Text("model")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
                     .frame(width: 60, alignment: .leading)
                 TextField("e.g. mistral, llama2", text: $model)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 10))
                     .padding(5)
-                    .background(Color.primary.opacity(0.06))
-                    .cornerRadius(4)
+                    .background(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
+                    .cornerRadius(8)
                     .onSubmit { save() }
             }
 
             Button("save") { save() }
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 9))
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.anchorTerracotta)
                 .disabled(endpoint.isEmpty || model.isEmpty)
         }
     }
@@ -864,7 +890,7 @@ private struct DebugMetric: View {
             Text(label)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 88, alignment: .leading)
+                .frame(width: 110, alignment: .leading)
             Text(value)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.primary)
@@ -877,55 +903,44 @@ private struct AnchorPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.body, design: .monospaced).weight(.medium))
+            .font(.system(.body, weight: .medium))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(Color.accentColor.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.3))
+            .background(Color.anchorTerracotta.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.35))
             .foregroundStyle(.white)
-            .cornerRadius(8)
+            .cornerRadius(10)
     }
 }
 
 private struct AnchorDestructiveButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.body, design: .monospaced).weight(.medium))
+            .font(.system(.body, weight: .medium))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(Color.red.opacity(configuration.isPressed ? 0.65 : 0.8))
+            .background(Color(red: 0.78, green: 0.29, blue: 0.25).opacity(configuration.isPressed ? 0.65 : 0.85))
             .foregroundStyle(.white)
-            .cornerRadius(8)
+            .cornerRadius(10)
     }
-}
-
-private struct VisualEffect: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material     = .hudWindow
-        view.blendingMode = .behindWindow
-        view.state        = .active
-        return view
-    }
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 // MARK: - RiskLevel Extensions
 
 extension RiskLevel {
     var label: String {
-        switch self { case .stable: "STABLE"; case .atRisk: "AT RISK"; case .drift: "DRIFT" }
+        switch self { case .stable: "in flow"; case .atRisk: "drifting"; case .drift: "off course" }
     }
     var color: Color {
-        switch self { case .stable: .green; case .atRisk: .orange; case .drift: .red }
+        switch self { case .stable: .anchorSage; case .atRisk: .anchorAmber; case .drift: Color(red: 0.78, green: 0.29, blue: 0.25) }
     }
 }
 
 // MARK: - Helpers
 
 private func scoreColor(for score: Double) -> Color {
-    if score >= 0.7 { return .green }
-    if score >= 0.4 { return .orange }
-    return .red
+    if score >= 0.7 { return .anchorSage }
+    if score >= 0.4 { return .anchorAmber }
+    return Color(red: 0.78, green: 0.29, blue: 0.25)
 }
 
 private func formatDuration(_ seconds: TimeInterval) -> String {
