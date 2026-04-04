@@ -10,10 +10,12 @@ struct AnalyticsView: View {
         self.summaries = SessionSummaryStore.shared.load()
     }
 
+    private static let minimumSessionsRequired = 3
+
     var body: some View {
         Group {
-            if profile.totalSessions == 0 {
-                emptyState
+            if profile.totalSessions < Self.minimumSessionsRequired {
+                insufficientDataState
             } else {
                 ScrollView {
                     VStack(spacing: 24) {
@@ -34,17 +36,36 @@ struct AnalyticsView: View {
         .frame(minWidth: 600, minHeight: 500)
     }
 
-    // MARK: - Empty State
+    // MARK: - Insufficient Data State
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
+    private var insufficientDataState: some View {
+        let completed = profile.totalSessions
+        let remaining = Self.minimumSessionsRequired - completed
+
+        return VStack(spacing: 20) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 48))
-                .foregroundStyle(Color.anchorTerracotta)
-            Text("Nothing here yet")
-                .font(.title2.weight(.medium))
-            Text("Complete a focus session to see your story unfold.")
-                .foregroundStyle(Color.anchorTextMuted)
+                .foregroundStyle(Color.anchorTerracotta.opacity(0.5))
+
+            VStack(spacing: 6) {
+                Text("Not enough data yet")
+                    .font(.title2.weight(.medium))
+                Text(completed == 0
+                    ? "Complete your first focus session to start building your profile."
+                    : "Complete \(remaining) more session\(remaining == 1 ? "" : "s") to unlock analytics.")
+                    .foregroundStyle(Color.anchorTextMuted)
+                    .multilineTextAlignment(.center)
+            }
+
+            if completed > 0 {
+                HStack(spacing: 6) {
+                    ForEach(0..<Self.minimumSessionsRequired, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(i < completed ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.25))
+                            .frame(width: 28, height: 6)
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

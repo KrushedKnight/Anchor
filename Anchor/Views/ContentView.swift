@@ -66,7 +66,8 @@ private struct AnchorTabBar: View {
                         Text(tab.rawValue).font(.system(size: 12, weight: selected == tab ? .medium : .regular))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
                     .background(
                         Group {
                             if selected == tab {
@@ -218,7 +219,7 @@ private struct RecentSessionRow: View {
                     .foregroundStyle(Color.anchorText)
                     .lineLimit(1)
                 HStack(spacing: 4) {
-                    Text(session.startedAt, style: .relative)
+                    Text(formatSessionDate(session.startedAt))
                     Text("·")
                     Text(formatDuration(session.duration))
                 }
@@ -941,6 +942,21 @@ private func scoreColor(for score: Double) -> Color {
     if score >= 0.7 { return .anchorSage }
     if score >= 0.4 { return .anchorAmber }
     return Color(red: 0.78, green: 0.29, blue: 0.25)
+}
+
+private func formatSessionDate(_ date: Date) -> String {
+    let calendar = Calendar.current
+    if calendar.isDateInToday(date) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
+    } else if calendar.isDateInYesterday(date) {
+        return "Yesterday"
+    } else {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
 }
 
 private func formatDuration(_ seconds: TimeInterval) -> String {

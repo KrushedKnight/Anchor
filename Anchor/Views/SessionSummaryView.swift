@@ -19,6 +19,7 @@ struct SessionSummaryView: View {
             .padding(28)
         }
         .frame(width: 420)
+        .frame(minHeight: 520)
     }
 
     private var header: some View {

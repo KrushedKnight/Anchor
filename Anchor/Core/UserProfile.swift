@@ -120,6 +120,49 @@ extension UserProfile {
             .map { $0 }
     }
 
+    var focusArchetype: FocusArchetype {
+        let dist       = workStateDistribution
+        let focusAvg   = averageFocusScore
+        let switchAvg  = averageSwitchesPerMinute
+        let atRiskFrac = totalDuration > 0 ? totalTimeAtRisk / totalDuration : 0
+
+        let productiveSwitchFrac = dist[WorkState.productiveSwitching.rawValue] ?? 0
+        if focusAvg > 0.65 && switchAvg > 4.0 && productiveSwitchFrac > 0.3 {
+            return .productiveSwitcher
+        }
+
+        let deepFocusFrac = dist[WorkState.deepFocus.rawValue] ?? 0
+        if deepFocusFrac > 0.4 && switchAvg < 2.0 {
+            return .deepFocuser
+        }
+
+        if focusAvg < 0.5 && atRiskFrac > 0.20 {
+            return .driftProne
+        }
+
+        return .balanced
+    }
+
+    var currentStreak: Int {
+        let calendar = Calendar.current
+        let sessionDays = Set(recentSessions.map { calendar.startOfDay(for: $0.date) })
+        guard !sessionDays.isEmpty else { return 0 }
+
+        let today = calendar.startOfDay(for: .now)
+        var checkDay = today
+        if !sessionDays.contains(checkDay) {
+            checkDay = calendar.date(byAdding: .day, value: -1, to: checkDay)!
+            if !sessionDays.contains(checkDay) { return 0 }
+        }
+
+        var streak = 0
+        while sessionDays.contains(checkDay) {
+            streak += 1
+            checkDay = calendar.date(byAdding: .day, value: -1, to: checkDay)!
+        }
+        return streak
+    }
+
     var recentTrend: Double? {
         guard recentSessions.count >= 3 else { return nil }
         let n = Double(recentSessions.count)
@@ -130,5 +173,36 @@ extension UserProfile {
         let num = zip(xs, ys).map { ($0 - xMean) * ($1 - yMean) }.reduce(0, +)
         let den = xs.map { ($0 - xMean) * ($0 - xMean) }.reduce(0, +)
         return den > 0 ? num / den : nil
+    }
+}
+
+// MARK: - Focus Archetype
+
+enum FocusArchetype: String {
+    case productiveSwitcher = "Productive Switcher"
+    case deepFocuser        = "Deep Focuser"
+    case driftProne         = "Drift-Prone"
+    case balanced           = "Balanced"
+
+    var icon: String {
+        switch self {
+        case .productiveSwitcher: "bolt.circle"
+        case .deepFocuser:        "scope"
+        case .driftProne:         "wind"
+        case .balanced:           "equal.circle"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .productiveSwitcher:
+            "You switch between tasks often but stay focused. Your brain likes variety — lean into it."
+        case .deepFocuser:
+            "You thrive in long, uninterrupted stretches. Protect those blocks — they're your superpower."
+        case .driftProne:
+            "You tend to wander when focus dips. Shorter sessions with clear goals can help build momentum."
+        case .balanced:
+            "You have a balanced focus style. No single pattern dominates — keep experimenting to find your groove."
+        }
     }
 }
