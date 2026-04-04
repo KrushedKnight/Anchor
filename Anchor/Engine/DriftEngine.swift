@@ -24,6 +24,8 @@ final class DriftEngine {
     private var pendingClassifications:  Set<String> = []
     private var distractionPressure:     TimeInterval = 0
     private var onTaskSinceLastDistraction: TimeInterval = 0
+    private var sustainedRecoveryStart:  Date?
+    private var isRecoverySuppressed:    Bool = false
 
     init(bus: DecisionBus? = nil, analyzer: BehaviorAnalyzer = .shared, accumulator: SessionStatsAccumulator = .shared) {
         self.bus         = bus
@@ -93,6 +95,8 @@ final class DriftEngine {
             onTaskSinceLastDistraction = 0
             lastPublishedAt        = nil
             lastPublishedRiskLevel = nil
+            sustainedRecoveryStart = nil
+            isRecoverySuppressed   = false
             accumulator.reset()
             applyProfileTuning()
         }
@@ -107,10 +111,28 @@ final class DriftEngine {
         state.sessionActive    = true
         state.sessionTaskTitle = session.taskTitle
 
-        let app = state.currentApp
+        let app    = state.currentApp
+        let domain = state.currentDomain
+        let task   = session.taskTitle
+
         guard !app.isEmpty else {
             state.contextFit = 1.0
             return
+        }
+
+        let isBrowser = config.knownBrowsers.contains(app)
+
+        if isBrowser && !domain.isEmpty {
+            if let level = session.fitForDomain(domain) {
+                state.contextFit = level.contextFit
+                return
+            }
+
+            if let heuristic = ContextHeuristics.heuristicForDomain(domain) {
+                state.contextFit = heuristic.contextFit
+                lazyClassifyDomain(domain: domain, task: task)
+                return
+            }
         }
 
         if let level = session.fitForApp(app) {
@@ -118,8 +140,14 @@ final class DriftEngine {
             return
         }
 
+        if let heuristic = ContextHeuristics.heuristicForApp(app) {
+            state.contextFit = heuristic.contextFit
+            lazyClassify(app: app, task: task)
+            return
+        }
+
         state.contextFit = 0.55
-        lazyClassify(app: app, task: session.taskTitle)
+        lazyClassify(app: app, task: task)
     }
 
     private func lazyClassify(app: String, task: String) {
@@ -135,6 +163,23 @@ final class DriftEngine {
                 print("[DriftEngine] lazy classify failed for '\(app)': \(error)")
             }
             pendingClassifications.remove(app)
+        }
+    }
+
+    private func lazyClassifyDomain(domain: String, task: String) {
+        let key = "domain:\(domain)"
+        guard !pendingClassifications.contains(key) else { return }
+        pendingClassifications.insert(key)
+
+        Task {
+            do {
+                let level = try await TaskClassifier.shared.classifyDomainSingle(task: task, domain: domain)
+                SessionManager.shared.classifyDomain(domain, as: level)
+                print("[DriftEngine] lazy classified domain '\(domain)' → \(level.rawValue)")
+            } catch {
+                print("[DriftEngine] lazy classify domain failed for '\(domain)': \(error)")
+            }
+            pendingClassifications.remove(key)
         }
     }
 
@@ -354,17 +399,49 @@ final class DriftEngine {
         return offTaskAccumulator + snap.dwellInCurrentContext
     }
 
+    private func updateRecoveryWatch() {
+        guard lastPublishedAt != nil, state.riskLevel != .stable else {
+            sustainedRecoveryStart = nil
+            isRecoverySuppressed   = false
+            return
+        }
+
+        if state.contextFit >= config.recoveryFitThreshold {
+            if sustainedRecoveryStart == nil {
+                sustainedRecoveryStart = .now
+            }
+            if let start = sustainedRecoveryStart,
+               Date.now.timeIntervalSince(start) >= config.recoveryConfirmationTime {
+                isRecoverySuppressed = true
+                print("[DriftEngine] recovery confirmed — suppressing republish")
+            }
+        } else {
+            if isRecoverySuppressed {
+                print("[DriftEngine] recovery lost — resuming republish")
+            }
+            sustainedRecoveryStart = nil
+            isRecoverySuppressed   = false
+        }
+    }
+
     private func maybePublish(_ snap: BehaviorSnapshot) {
         guard let bus else { print("[DriftEngine] maybePublish: no bus, skipping"); return }
+
+        updateRecoveryWatch()
 
         let levelChanged = state.riskLevel != lastPublishedRiskLevel
         let stillBad = state.riskLevel != .stable
         let timeSincePublish = lastPublishedAt.map { Date.now.timeIntervalSince($0) } ?? .infinity
-        let shouldRepublish = stillBad && timeSincePublish >= config.republishInterval
+        let shouldRepublish = stillBad && !isRecoverySuppressed && timeSincePublish >= config.republishInterval
 
         guard levelChanged || shouldRepublish else { return }
 
-        print("[DriftEngine] publishing decision: \(state.riskLevel) (changed=\(levelChanged) republish=\(shouldRepublish))")
+        if levelChanged {
+            sustainedRecoveryStart = nil
+            isRecoverySuppressed   = false
+        }
+
+        print("[DriftEngine] publishing decision: \(state.riskLevel) (changed=\(levelChanged) republish=\(shouldRepublish) suppressed=\(isRecoverySuppressed))")
         lastPublishedRiskLevel = state.riskLevel
         lastPublishedAt = .now
 

@@ -10,14 +10,27 @@ struct WidgetView: View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             ZStack(alignment: .topTrailing) {
                 Color.clear
-                if isHovered { expandedContent } else { collapsedContent }
+                if isHovered {
+                    expandedContent
+                        .onHover { hovering in
+                            if !hovering {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                    isHovered = false
+                                }
+                            }
+                        }
+                } else {
+                    collapsedContent
+                        .onHover { hovering in
+                            if hovering {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                    isHovered = true
+                                }
+                            }
+                        }
+                }
             }
             .frame(width: 240, height: 140)
-        }
-        .onHover { hovering in
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                isHovered = hovering
-            }
         }
         .preferredColorScheme(.light)
     }

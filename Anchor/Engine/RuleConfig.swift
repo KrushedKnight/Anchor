@@ -18,7 +18,9 @@ struct RuleConfig {
     var idleDrift:                  TimeInterval    // seconds idle before drift
     var highDwellThreshold:         TimeInterval    // seconds before dwell counts as "high"
     var scoreDecayWindow:           TimeInterval    // seconds over which score decays from base to floor
-    var republishInterval:          TimeInterval    // seconds between re-publishing same risk level
+    var republishInterval:          TimeInterval    // seconds between re-publishing when user hasn't recovered
+    var recoveryConfirmationTime:   TimeInterval    // seconds contextFit must stay good to confirm recovery
+    var recoveryFitThreshold:       Double          // contextFit above this = "recovered"
     var distractionPressureDecay:   TimeInterval    // seconds of on-task needed to fully reset pressure
 
     static let defaults = RuleConfig(
@@ -38,6 +40,8 @@ struct RuleConfig {
         highDwellThreshold:         25,
         scoreDecayWindow:           300,
         republishInterval:          30,
+        recoveryConfirmationTime:   15,
+        recoveryFitThreshold:       0.7,
         distractionPressureDecay:   60
     )
 }

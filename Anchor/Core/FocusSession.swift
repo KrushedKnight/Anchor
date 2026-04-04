@@ -19,7 +19,8 @@ struct FocusSession {
     var startedAt:      Date         = .now
     var taskTitle:      String
 
-    var appClassifications: [String: ContextFitLevel] = [:]
+    var appClassifications:    [String: ContextFitLevel] = [:]
+    var domainClassifications: [String: ContextFitLevel] = [:]
 
     func fitForApp(_ app: String) -> ContextFitLevel? {
         appClassifications[app]
@@ -27,5 +28,13 @@ struct FocusSession {
 
     mutating func classifyApp(_ app: String, as level: ContextFitLevel) {
         appClassifications[app] = level
+    }
+
+    func fitForDomain(_ domain: String) -> ContextFitLevel? {
+        domainClassifications[domain]
+    }
+
+    mutating func classifyDomain(_ domain: String, as level: ContextFitLevel) {
+        domainClassifications[domain] = level
     }
 }

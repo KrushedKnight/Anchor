@@ -39,6 +39,10 @@ final class SessionManager {
         activeSession?.classifyApp(app, as: level)
     }
 
+    func classifyDomain(_ domain: String, as level: ContextFitLevel) {
+        activeSession?.classifyDomain(domain, as: level)
+    }
+
     func pause(reason: String = "manual") {
         guard let session = activeSession, !isPaused else { return }
         isPaused = true
