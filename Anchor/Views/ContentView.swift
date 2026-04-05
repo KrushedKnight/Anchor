@@ -353,16 +353,19 @@ private struct CompactAnalyticsTab: View {
             insufficientDataState
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    archetypeSection
-                    streakAndDayOfWeekRow
+                VStack(alignment: .leading, spacing: 24) {
+                    focusPulse
+                    focusProfileCard
                     weeklyChartSection
-                    insightsSection
+                    streakAndDayOfWeekRow
+                    driftSourcesSection
                 }
                 .padding(20)
             }
         }
     }
+
+    // MARK: - Insufficient Data
 
     private var insufficientDataState: some View {
         let completed = profile.totalSessions
@@ -395,26 +398,234 @@ private struct CompactAnalyticsTab: View {
         .padding(20)
     }
 
-    private var archetypeSection: some View {
-        let archetype = profile.focusArchetype
+    // MARK: - Section 1: Focus Pulse (Hero)
+
+    private var focusPulse: some View {
+        let score = profile.baselineFocusScore
+        let scorePct = Int(score * 100)
+        let delta = focusScoreDelta()
+        let streak = profile.currentStreak
+
         return VStack(alignment: .leading, spacing: 6) {
-            SectionHeader("Your Focus Archetype")
-            HStack(spacing: 10) {
-                Image(systemName: archetype.icon)
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color.anchorTerracotta)
-                    .frame(width: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(archetype.rawValue)
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(archetype.description)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.anchorTextMuted)
-                        .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("\(scorePct)%")
+                    .font(.system(size: 36, weight: .heavy, design: .serif))
+                    .foregroundStyle(scoreColor(for: score))
+
+                if let (pct, isUp) = delta {
+                    trendPill(pct: pct, isUp: isUp)
                 }
+
+                Spacer()
+
+                if streak > 0 {
+                    VStack(spacing: 2) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.anchorTerracotta)
+                        Text("\(streak)")
+                            .font(.system(size: 14, weight: .bold).monospacedDigit())
+                    }
+                }
+            }
+
+            Text(pulseSubtitle)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.anchorTextMuted)
+        }
+    }
+
+    private var pulseSubtitle: String {
+        let streak = profile.currentStreak
+        if let slope = profile.recentTrend {
+            if slope > 0.02 { return "Your focus is climbing. Keep it up." }
+            if slope < -0.02 { return "Dipping a bit \u{2014} try a shorter session today." }
+        }
+        if streak > 3 { return "\(streak) days strong." }
+        return "Steady. You\u{2019}re building a baseline."
+    }
+
+    private func trendPill(pct: Int, isUp: Bool) -> some View {
+        let color = isUp ? Color.anchorSage : Color(red: 0.78, green: 0.29, blue: 0.25)
+        return HStack(spacing: 3) {
+            Image(systemName: isUp ? "arrow.up.right" : "arrow.down.right")
+                .font(.system(size: 9, weight: .bold))
+            Text("\(pct)%")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.12), in: Capsule())
+    }
+
+    private func focusScoreDelta() -> (Int, Bool)? {
+        let sessions = profile.recentSessions
+        guard sessions.count >= 6 else { return nil }
+        let mid = sessions.count / 2
+        let recentAvg = sessions[mid...].map(\.focusScoreAvg).reduce(0, +) / Double(sessions.count - mid)
+        let olderAvg = sessions[..<mid].map(\.focusScoreAvg).reduce(0, +) / Double(mid)
+        guard olderAvg > 0 else { return nil }
+        let delta = Int(((recentAvg - olderAvg) / olderAvg) * 100)
+        if delta == 0 { return nil }
+        return (abs(delta), delta > 0)
+    }
+
+    // MARK: - Section 2: Focus Profile (Synthesized Card)
+
+    private var focusProfileCard: some View {
+        let archetype = profile.focusArchetype
+        let insights = generateSmartInsights()
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: archetype.icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.anchorTerracotta)
+                Text(archetype.rawValue)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(insights.prefix(3).enumerated()), id: \.offset) { _, insight in
+                    HStack(alignment: .top, spacing: 8) {
+                        Circle()
+                            .fill(Color.anchorTerracotta.opacity(0.5))
+                            .frame(width: 5, height: 5)
+                            .padding(.top, 4)
+                        Text(insight)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.anchorText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Text(archetype.description)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func generateSmartInsights() -> [String] {
+        var insights: [String] = []
+
+        let bestHours = profile.bestFocusHours(top: 1)
+        if let hour = bestHours.first {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h a"
+            var comps = DateComponents()
+            comps.hour = hour
+            if let date = Calendar.current.date(from: comps) {
+                insights.append("You focus best around \(formatter.string(from: date)).")
+            }
+        }
+
+        if let top = profile.topDistractions.first {
+            let name = top.context
+                .replacingOccurrences(of: "domain:", with: "")
+                .replacingOccurrences(of: "app:", with: "")
+            insights.append("\(name) ate \(formatDuration(top.seconds)) of your time.")
+        }
+
+        let dist = profile.workStateDistribution
+        let sorted = dist.sorted { $0.value > $1.value }
+        if let dominant = sorted.first, dominant.value > 0.3 {
+            let second = sorted.dropFirst().first
+            var line = "You spend most of your time \(dominant.key)"
+            if let s = second, s.value > 0.2 {
+                line += ", with time \(s.key)"
+            }
+            insights.append(line + ".")
+        }
+
+        if profile.softInterventionsFired >= 5 {
+            let pct = Int(profile.softRecoveryRate * 100)
+            insights.append("Gentle nudges help you refocus \(pct)% of the time.")
+        }
+
+        if let slope = profile.recentTrend {
+            if slope > 0.02 {
+                insights.append("Your focus trend is pointing upward.")
+            } else if slope < -0.02 {
+                insights.append("Your focus has been dipping \u{2014} shorter sessions might help.")
+            }
+        }
+
+        if insights.isEmpty {
+            insights.append("Keep completing sessions to unlock insights.")
+        }
+
+        return insights
+    }
+
+    // MARK: - Section 3: This Week (Enhanced Chart)
+
+    private var weeklyChartSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader("This Week")
+
+            let data = weekData()
+            let hasData = data.contains { $0.totalMinutes > 0 }
+            if !hasData {
+                Text("No sessions this week")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.anchorTextMuted)
+                    .frame(height: 100)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Chart {
+                    ForEach(data) { day in
+                        BarMark(
+                            x: .value("Day", day.label),
+                            y: .value("Minutes", day.totalMinutes)
+                        )
+                        .foregroundStyle(day.avgScore > 0 ? barColor(for: day.avgScore).opacity(0.7) : Color.anchorSand)
+                        .cornerRadius(3)
+                    }
+
+                    ForEach(data.filter { $0.avgScore > 0 }) { day in
+                        LineMark(
+                            x: .value("Day", day.label),
+                            y: .value("Score", day.avgScore * maxMinutes(in: data))
+                        )
+                        .foregroundStyle(Color.anchorTerracotta)
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+
+                        PointMark(
+                            x: .value("Day", day.label),
+                            y: .value("Score", day.avgScore * maxMinutes(in: data))
+                        )
+                        .foregroundStyle(Color.anchorTerracotta)
+                        .symbolSize(20)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) { Text("\(Int(v))m").font(.system(size: 8)) }
+                        }
+                    }
+                }
+                .frame(height: 160)
+
+                let weekSessions = summaries.filter { isThisWeek($0.startedAt) }
+                let totalMins = weekSessions.reduce(0.0) { $0 + $1.duration } / 60
+                Text("\(weekSessions.count) session\(weekSessions.count == 1 ? "" : "s"), \(formatDuration(totalMins * 60)) this week")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.anchorTextMuted)
             }
         }
     }
+
+    // MARK: - Section 4: Streak + Day of Week
 
     private var streakAndDayOfWeekRow: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -452,6 +663,7 @@ private struct CompactAnalyticsTab: View {
                     .frame(height: 80)
                     .frame(maxWidth: .infinity)
             } else {
+                let bestDay = dayData.max(by: { $0.score < $1.score })?.weekday
                 Chart(dayData, id: \.weekday) { entry in
                     BarMark(
                         x: .value("Day", entry.label),
@@ -459,6 +671,13 @@ private struct CompactAnalyticsTab: View {
                     )
                     .foregroundStyle(barColor(for: entry.score))
                     .cornerRadius(3)
+                    .annotation(position: .top) {
+                        if entry.weekday == bestDay {
+                            Circle()
+                                .fill(Color.anchorTerracotta)
+                                .frame(width: 4, height: 4)
+                        }
+                    }
                 }
                 .chartYScale(domain: 0...100)
                 .chartYAxis {
@@ -474,6 +693,49 @@ private struct CompactAnalyticsTab: View {
         }
         .frame(maxWidth: .infinity)
     }
+
+    // MARK: - Section 5: Where You Drift (Conditional)
+
+    private var driftSourcesSection: some View {
+        let distractions = profile.topDistractions.prefix(3)
+        return Group {
+            if !distractions.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader("Where You Drift")
+
+                    let maxSeconds = distractions.first?.seconds ?? 1
+                    ForEach(Array(distractions.enumerated()), id: \.offset) { _, entry in
+                        HStack(spacing: 8) {
+                            Text(cleanLabel(entry.context))
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                                .frame(width: 100, alignment: .leading)
+
+                            GeometryReader { geo in
+                                Capsule()
+                                    .fill(Color.anchorTerracotta.opacity(0.2))
+                                    .frame(width: geo.size.width)
+                                    .overlay(alignment: .leading) {
+                                        Capsule()
+                                            .fill(Color.anchorTerracotta.opacity(0.6))
+                                            .frame(width: geo.size.width * (entry.seconds / maxSeconds))
+                                    }
+                            }
+                            .frame(height: 8)
+
+                            Text(formatDuration(entry.seconds))
+                                .font(.system(size: 10).monospacedDigit())
+                                .foregroundStyle(Color.anchorTextMuted)
+                                .frame(width: 44, alignment: .trailing)
+                        }
+                        .frame(height: 20)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Data Helpers
 
     private struct DayEntry {
         var weekday: Int
@@ -500,45 +762,6 @@ private struct CompactAnalyticsTab: View {
                 label: symbols[wd - 1],
                 score: scoreSums[wd, default: 0] / Double(counts[wd, default: 1])
             )
-        }
-    }
-
-    private var weeklyChartSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader("This Week")
-
-            let data = weekData()
-            if data.allSatisfy({ $0.totalMinutes == 0 }) {
-                Text("No sessions this week")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.anchorTextMuted)
-                    .frame(height: 100)
-                    .frame(maxWidth: .infinity)
-            } else {
-                Chart(data) { day in
-                    BarMark(
-                        x: .value("Day", day.label),
-                        y: .value("Minutes", day.totalMinutes)
-                    )
-                    .foregroundStyle(barColor(for: day.avgScore))
-                    .cornerRadius(3)
-                }
-                .chartYAxisLabel("min")
-                .frame(height: 160)
-            }
-        }
-    }
-
-    private var insightsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeader("Insights")
-
-            ForEach(Array(generateInsights().enumerated()), id: \.offset) { _, insight in
-                Text(insight)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.anchorText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
@@ -569,56 +792,36 @@ private struct CompactAnalyticsTab: View {
         }
     }
 
-    private func generateInsights() -> [String] {
-        var insights: [String] = []
-
-        let bestHours = profile.bestFocusHours(top: 1)
-        if let hour = bestHours.first {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "h a"
-            var comps = DateComponents()
-            comps.hour = hour
-            if let date = Calendar.current.date(from: comps) {
-                insights.append("You focus best around \(formatter.string(from: date)).")
-            }
-        }
-
-        if let top = profile.topDistractions.first {
-            let name = top.context
-                .replacingOccurrences(of: "domain:", with: "")
-                .replacingOccurrences(of: "app:", with: "")
-            insights.append("\(name) is your biggest distractor (\(formatInsightDuration(top.seconds)) total).")
-        }
-
-        if profile.softInterventionsFired >= 5 {
-            let pct = Int(profile.softRecoveryRate * 100)
-            insights.append("Soft nudges help you refocus \(pct)% of the time.")
-        }
-
-        if let slope = profile.recentTrend {
-            if slope > 0.02 {
-                insights.append("Your focus is trending upward.")
-            } else if slope < -0.02 {
-                insights.append("Your focus has been declining — shorter sessions might help.")
-            } else {
-                insights.append("Your focus has been steady across recent sessions.")
-            }
-        }
-
-        if insights.isEmpty {
-            insights.append("Keep completing sessions to unlock insights.")
-        }
-
-        return insights
+    private func maxMinutes(in data: [DayFocus]) -> Double {
+        max(data.map(\.totalMinutes).max() ?? 1, 1)
     }
 
-    private func barColor(for score: Double) -> Color {
+    private func isThisWeek(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let weekAgo = calendar.date(byAdding: .day, value: -6, to: today)!
+        return date >= weekAgo
+    }
+
+    // MARK: - Formatting Helpers
+
+    private func scoreColor(for score: Double) -> Color {
         if score >= 0.7 { return .anchorSage }
         if score >= 0.4 { return .anchorAmber }
         return Color(red: 0.78, green: 0.29, blue: 0.25)
     }
 
-    private func formatInsightDuration(_ seconds: Double) -> String {
+    private func barColor(for score: Double) -> Color {
+        scoreColor(for: score)
+    }
+
+    private func cleanLabel(_ context: String) -> String {
+        context
+            .replacingOccurrences(of: "domain:", with: "")
+            .replacingOccurrences(of: "app:", with: "")
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
         let total = Int(seconds)
         let h = total / 3600
         let m = (total % 3600) / 60
