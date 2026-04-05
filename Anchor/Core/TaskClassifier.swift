@@ -10,6 +10,15 @@ final class TaskClassifier {
     static let shared = TaskClassifier()
     private init() {}
 
+    static var isConfigured: Bool {
+        let store = APIKeyStore.shared
+        switch store.activeProvider {
+        case .anthropic: return store.retrieve(for: .anthropic) != nil
+        case .openAI:    return store.retrieve(for: .openAI) != nil
+        case .ollama:    return true
+        }
+    }
+
     func classifySingle(task: String, app: String) async throws -> ContextFitLevel {
         let result = try await classify(task: task, apps: [app])
         if result.onTask.contains(app)  { return .onTask }

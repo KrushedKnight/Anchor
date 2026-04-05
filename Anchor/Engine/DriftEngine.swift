@@ -186,6 +186,7 @@ final class DriftEngine {
     }
 
     private func lazyClassify(app: String, task: String) {
+        guard TaskClassifier.isConfigured else { return }
         guard !pendingClassifications.contains(app) else { return }
         pendingClassifications.insert(app)
 
@@ -202,6 +203,7 @@ final class DriftEngine {
     }
 
     private func lazyClassifyDomain(domain: String, task: String) {
+        guard TaskClassifier.isConfigured else { return }
         let key = "domain:\(domain)"
         guard !pendingClassifications.contains(key) else { return }
         pendingClassifications.insert(key)
