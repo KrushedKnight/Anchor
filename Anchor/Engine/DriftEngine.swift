@@ -145,8 +145,14 @@ final class DriftEngine {
         }
 
         let isBrowser = config.knownBrowsers.contains(app)
+        let overrides = ClassificationOverrideStore.shared
 
         if isBrowser && !domain.isEmpty {
+            if let level = overrides.overrideForDomain(domain) {
+                state.contextFit = level.contextFit
+                return
+            }
+
             if let level = session.fitForDomain(domain) {
                 state.contextFit = level.contextFit
                 return
@@ -157,6 +163,11 @@ final class DriftEngine {
                 lazyClassifyDomain(domain: domain, task: task)
                 return
             }
+        }
+
+        if let level = overrides.overrideForApp(app) {
+            state.contextFit = level.contextFit
+            return
         }
 
         if let level = session.fitForApp(app) {

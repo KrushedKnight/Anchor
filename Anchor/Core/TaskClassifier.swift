@@ -67,7 +67,10 @@ final class TaskClassifier {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
         let response  = try JSONDecoder().decode(AnthropicMessagesResponse.self, from: data)
 
         guard let text = response.content.first?.text else {
@@ -107,7 +110,10 @@ final class TaskClassifier {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
         let response  = try JSONDecoder().decode(OpenAICompletionResponse.self, from: data)
 
         guard let text = response.choices.first?.message.content else {
@@ -150,7 +156,10 @@ final class TaskClassifier {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
         let response  = try JSONDecoder().decode(OllamaChatResponse.self, from: data)
 
         guard !response.message.content.isEmpty else {
@@ -181,7 +190,10 @@ final class TaskClassifier {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
         let response  = try JSONDecoder().decode(AnthropicMessagesResponse.self, from: data)
 
         guard let text = response.content.first?.text else {
@@ -213,7 +225,10 @@ final class TaskClassifier {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
         let response  = try JSONDecoder().decode(OpenAICompletionResponse.self, from: data)
 
         guard let text = response.choices.first?.message.content else {
@@ -248,7 +263,10 @@ final class TaskClassifier {
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
         let response  = try JSONDecoder().decode(OllamaChatResponse.self, from: data)
 
         guard !response.message.content.isEmpty else {
@@ -301,6 +319,32 @@ enum ClassifierError: Error {
     case noAPIKey
     case invalidEndpoint
     case networkError(String)
+    case httpError(Int)
+}
+
+extension ClassifierError {
+    var userMessage: String {
+        switch self {
+        case .noAPIKey:
+            return "No API key set for this provider. Add one in Settings → AI Brain."
+        case .noProviderConfigured:
+            return "No AI provider configured. Add a key in Settings → AI Brain."
+        case .invalidEndpoint:
+            return "Invalid Ollama endpoint URL. Check Settings → AI Brain."
+        case .httpError(401):
+            return "API key rejected (401). Check your key in Settings → AI Brain."
+        case .httpError(429):
+            return "Rate limited (429). Wait a moment and try again."
+        case .httpError(let code):
+            return "API returned HTTP \(code). Check your connection or key."
+        case .networkError(let msg):
+            return "Network error: \(msg)"
+        case .emptyResponse:
+            return "The AI returned an empty response. Try again."
+        case .parseError:
+            return "Couldn't parse the AI response. Try again."
+        }
+    }
 }
 
 // Anthropic API response format

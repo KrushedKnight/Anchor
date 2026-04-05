@@ -70,11 +70,26 @@ final class APIKeyStore {
         return retrieve(for: provider) != nil
     }
 
-    func save(_ key: String, for provider: APIProvider) {
-        guard !key.isEmpty else { return }
+    static func validate(_ key: String, for provider: APIProvider) -> String? {
+        switch provider {
+        case .anthropic:
+            guard key.hasPrefix("sk-ant-") else { return "Anthropic keys must start with sk-ant-" }
+            guard key.count >= 40 else { return "Key looks too short" }
+            return nil
+        case .openAI:
+            guard key.hasPrefix("sk-") else { return "OpenAI keys must start with sk-" }
+            guard key.count >= 20 else { return "Key looks too short" }
+            return nil
+        case .ollama:
+            return nil
+        }
+    }
+
+    @discardableResult
+    func save(_ key: String, for provider: APIProvider) -> String? {
+        guard !key.isEmpty else { return "Key cannot be empty" }
 
         if provider == .ollama {
-            // For Ollama, key is in format "endpoint|modelName"
             let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
             if parts.count == 2 {
                 ollamaConfig.endpoint = parts[0]
@@ -82,10 +97,10 @@ final class APIKeyStore {
                 saveOllamaConfig()
                 configured.insert(provider)
             }
-            return
+            return nil
         }
 
-        guard let data = key.data(using: .utf8) else { return }
+        guard let data = key.data(using: .utf8) else { return "Key contains invalid characters" }
         let query: [CFString: Any] = [
             kSecClass:       kSecClassGenericPassword,
             kSecAttrService: service,
@@ -98,8 +113,12 @@ final class APIKeyStore {
             kSecAttrAccount: provider.rawValue,
             kSecValueData:   data
         ]
-        SecItemAdd(attrs as CFDictionary, nil)
+        let status = SecItemAdd(attrs as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            return "Keychain error (\(status)). Try again or restart the app."
+        }
         configured.insert(provider)
+        return nil
     }
 
     func saveOllamaConfig(_ config: OllamaConfig) {

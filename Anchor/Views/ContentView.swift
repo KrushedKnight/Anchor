@@ -6,6 +6,8 @@ import AppKit
 
 struct ContentView: View {
     var sessionManager = SessionManager.shared
+    var alertManager   = AppAlertManager.shared
+    @AppStorage("onboarding.complete") private var onboardingComplete = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +24,21 @@ struct ContentView: View {
         .frame(minHeight: 520)
         .background(Color.anchorLinen.ignoresSafeArea())
         .preferredColorScheme(.light)
+        .alert(
+            alertManager.current?.title ?? "",
+            isPresented: Binding(
+                get: { alertManager.current != nil },
+                set: { if !$0 { alertManager.current = nil } }
+            ),
+            presenting: alertManager.current
+        ) { alert in
+            if let actionTitle = alert.actionTitle {
+                Button(actionTitle) { alert.action?() }
+            }
+            Button("OK", role: .cancel) {}
+        } message: { alert in
+            Text(alert.message)
+        }
         .onChange(of: sessionManager.isActive) { _, active in
             if active {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -33,6 +50,9 @@ struct ContentView: View {
             if id != nil {
                 findMainWindow()?.deminiaturize(nil)
             }
+        }
+        .sheet(isPresented: Binding(get: { !onboardingComplete }, set: { _ in })) {
+            OnboardingView()
         }
     }
 
@@ -277,7 +297,11 @@ private struct HomeTab: View {
                 for app in result.ambiguous { map[app] = .ambiguous }
                 for app in result.offTask   { map[app] = .offTask }
                 classifications = map
-            } catch {}
+            } catch let error as ClassifierError {
+                AppAlertManager.shared.post(title: "Classification Failed", message: error.userMessage)
+            } catch {
+                AppAlertManager.shared.post(title: "Classification Failed", message: error.localizedDescription)
+            }
         }
     }
 }
@@ -643,6 +667,10 @@ private struct SettingsTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if NotificationHandler.shared.isGranted == false {
+                    notificationDeniedBanner
+                }
+
                 ProviderSettingsSection()
 
                 Divider()
@@ -655,6 +683,10 @@ private struct SettingsTab: View {
 
                 Divider()
 
+                classificationsSection
+
+                Divider()
+
                 debugSection
             }
             .padding(20)
@@ -662,6 +694,32 @@ private struct SettingsTab: View {
         .sheet(isPresented: $showDebug) {
             DebugSheet()
         }
+    }
+
+    private var notificationDeniedBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bell.slash.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Notifications blocked")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.anchorText)
+                Text("Nudges won't be delivered. Enable in System Settings.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
+            }
+            Spacer()
+            Button("Open") {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+            }
+            .font(.system(size: 9, weight: .medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.anchorTerracotta)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.2), lineWidth: 1))
     }
 
     private var pomodoroSection: some View {
@@ -718,6 +776,27 @@ private struct SettingsTab: View {
                     d?.windowTitleObserver.stop()
                     if on { d?.windowTitleObserver.start() }
                 }
+        }
+    }
+
+    private var classificationsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader("Classifications")
+
+            Text("Apps")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.anchorTextMuted)
+                .textCase(.uppercase)
+
+            ClassificationListSection(kind: .app)
+
+            Text("Domains")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.anchorTextMuted)
+                .textCase(.uppercase)
+                .padding(.top, 4)
+
+            ClassificationListSection(kind: .domain)
         }
     }
 
@@ -1195,6 +1274,7 @@ private struct APIKeyField: View {
     var provider: APIProvider
     var store:    APIKeyStore
     @Binding var keyInput: String
+    @State private var saveError: String?
 
     var body: some View {
         if store.isSet(for: provider) {
@@ -1209,20 +1289,28 @@ private struct APIKeyField: View {
                     .foregroundStyle(.red)
             }
         } else {
-            HStack(spacing: 6) {
-                SecureField(provider.placeholder, text: $keyInput)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 10))
-                    .padding(5)
-                    .background(Color.white)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
-                    .cornerRadius(8)
-                    .onSubmit { save() }
-                Button("save") { save() }
-                    .font(.system(size: 9))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.anchorTerracotta)
-                    .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    SecureField(provider.placeholder, text: $keyInput)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 10))
+                        .padding(5)
+                        .background(Color.white)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(saveError != nil ? Color.red.opacity(0.6) : Color.anchorBorder, lineWidth: 1.5))
+                        .cornerRadius(8)
+                        .onSubmit { save() }
+                        .onChange(of: keyInput) { _, _ in saveError = nil }
+                    Button("save") { save() }
+                        .font(.system(size: 9))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.anchorTerracotta)
+                        .disabled(keyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                if let error = saveError {
+                    Text(error)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.red)
+                }
             }
         }
     }
@@ -1230,7 +1318,15 @@ private struct APIKeyField: View {
     private func save() {
         let trimmed = keyInput.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        store.save(trimmed, for: provider)
+        if let validationError = APIKeyStore.validate(trimmed, for: provider) {
+            saveError = validationError
+            return
+        }
+        if let keychainError = store.save(trimmed, for: provider) {
+            saveError = keychainError
+            return
+        }
+        saveError = nil
         keyInput = ""
     }
 }
@@ -1307,7 +1403,7 @@ private struct DebugMetric: View {
     }
 }
 
-private struct AnchorPrimaryButtonStyle: ButtonStyle {
+struct AnchorPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -1391,4 +1487,118 @@ private func formatDuration(_ seconds: TimeInterval) -> String {
     let h = s / 3600
     let m = (s % 3600) / 60
     return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+}
+
+// MARK: - Classification Overrides UI
+
+private enum ClassificationKind { case app, domain }
+
+private struct ClassificationListSection: View {
+    var kind: ClassificationKind
+    var store = ClassificationOverrideStore.shared
+
+    @State private var newName  = ""
+    @State private var newLevel = ContextFitLevel.onTask
+
+    private var overrides: [String: ContextFitLevel] {
+        kind == .app ? store.appOverrides : store.domainOverrides
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(overrides.keys.sorted(), id: \.self) { key in
+                ClassificationOverrideRow(
+                    name: key,
+                    level: Binding(
+                        get: { overrides[key] ?? .ambiguous },
+                        set: { set(key, to: $0) }
+                    ),
+                    onRemove: { remove(key) }
+                )
+            }
+
+            HStack(spacing: 6) {
+                TextField(kind == .app ? "App name..." : "domain.com...", text: $newName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorText)
+                    .frame(maxWidth: .infinity)
+
+                LevelPicker(level: $newLevel)
+
+                Button {
+                    guard !newName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    let name = newName.trimmingCharacters(in: .whitespaces)
+                    if kind == .app { store.setApp(name, to: newLevel) }
+                    else            { store.setDomain(name, to: newLevel) }
+                    newName = ""
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(Color.anchorSage)
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.anchorSand.opacity(0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func set(_ name: String, to level: ContextFitLevel) {
+        if kind == .app { store.setApp(name, to: level) }
+        else            { store.setDomain(name, to: level) }
+    }
+
+    private func remove(_ name: String) {
+        if kind == .app { store.removeApp(name) }
+        else            { store.removeDomain(name) }
+    }
+}
+
+private struct ClassificationOverrideRow: View {
+    var name: String
+    @Binding var level: ContextFitLevel
+    var onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(name)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorText)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            LevelPicker(level: $level)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.anchorSand.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+    }
+}
+
+private struct LevelPicker: View {
+    @Binding var level: ContextFitLevel
+
+    var body: some View {
+        Picker("", selection: $level) {
+            Text("On Task").tag(ContextFitLevel.onTask)
+            Text("Ambiguous").tag(ContextFitLevel.ambiguous)
+            Text("Off Task").tag(ContextFitLevel.offTask)
+        }
+        .pickerStyle(.menu)
+        .controlSize(.mini)
+        .labelsHidden()
+        .frame(width: 82)
+    }
 }

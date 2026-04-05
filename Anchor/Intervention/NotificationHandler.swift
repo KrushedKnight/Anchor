@@ -1,8 +1,11 @@
 import Foundation
 import UserNotifications
 
+@Observable
 final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationHandler()
+
+    private(set) var isGranted: Bool?
 
     private let bus: InterventionBus
     private var subscriptionId: UUID?
@@ -13,8 +16,8 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func start() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
-            print("[NotificationHandler] auth granted=\(granted), error=\(String(describing: error))")
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            DispatchQueue.main.async { self.isGranted = granted }
         }
         UNUserNotificationCenter.current().delegate = self
 
@@ -52,7 +55,6 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error { print("[NotificationHandler] add failed: \(error)") }
-            else { print("[NotificationHandler] notification delivered to UNUserNotificationCenter") }
         }
     }
 
