@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SessionSummaryView: View {
     var summary: SessionSummary
+    @State private var note: String = ""
 
     var body: some View {
         ScrollView {
@@ -13,13 +14,22 @@ struct SessionSummaryView: View {
                 if !summary.topDistractions.isEmpty {
                     distractionsSection
                 }
-                Button("Start Fresh") { SessionManager.shared.dismissSummary() }
+                noteSection
+                Button("Start Fresh") { saveAndDismiss() }
                     .buttonStyle(PrimaryButtonStyle())
             }
             .padding(28)
         }
         .frame(width: 420)
         .frame(minHeight: 520)
+        .onAppear { note = summary.note }
+    }
+
+    private func saveAndDismiss() {
+        var updated = summary
+        updated.note = note
+        SessionSummaryStore.shared.save(updated)
+        SessionManager.shared.dismissSummary()
     }
 
     private var header: some View {
@@ -59,6 +69,14 @@ struct SessionSummaryView: View {
         VStack(alignment: .leading, spacing: 8) {
             SummaryLabel("Time Breakdown")
             SummaryRow(label: "Duration",     value: formatDuration(summary.duration))
+            if summary.breakCount > 0 {
+                SummaryRow(label: "Active time",  value: formatDuration(summary.activeWorkTime))
+                SummaryRow(label: "Break time",   value: formatDuration(summary.totalBreakTime), color: .anchorBreakBlue)
+                SummaryRow(label: "Breaks taken",  value: "\(summary.breakCount)")
+            }
+            if let cycles = summary.pomodoroCompletedCycles {
+                SummaryRow(label: "Pomodoro cycles", value: "\(cycles)")
+            }
             SummaryRow(label: "Focused",      value: formatDuration(summary.timeStable),  color: .anchorSage)
             SummaryRow(label: "At risk",      value: formatDuration(summary.timeAtRisk),  color: .anchorAmber)
             SummaryRow(label: "Drifted",      value: formatDuration(summary.timeDrift),   color: Color(red: 0.78, green: 0.29, blue: 0.25))
@@ -104,6 +122,32 @@ struct SessionSummaryView: View {
             ForEach(summary.topDistractions, id: \.context) { entry in
                 SummaryRow(label: entry.context, value: formatDuration(entry.seconds), color: Color(red: 0.78, green: 0.29, blue: 0.25).opacity(0.8))
             }
+        }
+    }
+
+    private var noteSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SummaryLabel("Session Note")
+            TextEditor(text: $note)
+                .font(.system(.caption))
+                .scrollContentBackground(.hidden)
+                .background(Color.anchorSand)
+                .cornerRadius(6)
+                .frame(minHeight: 64, maxHeight: 120)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.anchorTextMuted.opacity(0.2), lineWidth: 1)
+                )
+                .overlay(alignment: .topLeading) {
+                    if note.isEmpty {
+                        Text("What went well? What derailed you?")
+                            .font(.system(.caption))
+                            .foregroundStyle(Color.anchorTextMuted.opacity(0.5))
+                            .padding(.horizontal, 5)
+                            .padding(.top, 8)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
     }
 

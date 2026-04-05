@@ -9,6 +9,7 @@ extension Color {
     static let anchorBorder     = Color(red: 0.894, green: 0.851, blue: 0.784)
     static let anchorText       = Color(red: 0.176, green: 0.145, blue: 0.125)
     static let anchorTextMuted  = Color(red: 0.478, green: 0.431, blue: 0.396)
+    static let anchorBreakBlue  = Color(red: 0.380, green: 0.545, blue: 0.690)
 }
 
 struct SectionHeader: View {

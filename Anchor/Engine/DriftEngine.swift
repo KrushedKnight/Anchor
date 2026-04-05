@@ -47,6 +47,8 @@ final class DriftEngine {
     }
 
     private func tick() {
+        guard !SessionManager.shared.isPaused else { return }
+
         analyzer.update()
         let snap = analyzer.snapshot
 

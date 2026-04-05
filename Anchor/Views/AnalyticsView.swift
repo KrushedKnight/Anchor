@@ -30,6 +30,10 @@ struct AnalyticsView: View {
                         if profile.totalSessions >= 5 {
                             nudgeEffectivenessSection
                         }
+                        let notedSessions = summaries.filter { !$0.note.isEmpty }
+                        if !notedSessions.isEmpty {
+                            sessionNotesSection(notedSessions)
+                        }
                     }
                     .padding(24)
                 }
@@ -474,6 +478,34 @@ struct AnalyticsView: View {
             }
             .frame(height: 120)
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Session Notes
+
+    private func sessionNotesSection(_ noted: [SessionSummary]) -> some View {
+        AnalyticsCard(title: "Session Notes", subtitle: "\(noted.count) note\(noted.count == 1 ? "" : "s")") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(noted.prefix(5)) { session in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
+                                .font(.caption.weight(.medium))
+                            Spacer()
+                            Text(session.startedAt, style: .date)
+                                .font(.caption2)
+                                .foregroundStyle(Color.anchorTextMuted)
+                        }
+                        Text(session.note)
+                            .font(.caption)
+                            .foregroundStyle(Color.anchorTextMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if session.id != noted.prefix(5).last?.id {
+                        Divider()
+                    }
+                }
+            }
         }
     }
 

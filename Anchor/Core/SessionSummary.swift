@@ -31,6 +31,12 @@ struct SessionSummary: Codable, Identifiable {
 
     var timeByWorkState:          [String: TimeInterval] = [:]
     var averageSwitchesPerMinute:  Double                 = 0
+    var note:                      String                 = ""
+
+    var totalBreakTime:            TimeInterval            = 0
+    var breakCount:                Int                     = 0
+    var pomodoroCompletedCycles:   Int?                    = nil
 
     var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }
+    var activeWorkTime: TimeInterval { duration - totalBreakTime }
 }

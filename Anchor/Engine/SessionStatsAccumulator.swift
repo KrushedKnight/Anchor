@@ -66,7 +66,13 @@ final class SessionStatsAccumulator {
         }
     }
 
-    func finalize(session: FocusSession, finalState: EngineState) -> SessionSummary {
+    func finalize(
+        session: FocusSession,
+        finalState: EngineState,
+        totalBreakTime: TimeInterval = 0,
+        breakCount: Int = 0,
+        pomodoroCompletedCycles: Int? = nil
+    ) -> SessionSummary {
         let samples = focusScoreSamples
         let avg     = samples.isEmpty ? 1.0 : samples.reduce(0, +) / Double(samples.count)
 
@@ -98,7 +104,10 @@ final class SessionStatsAccumulator {
             escalationCount:         escalationCount,
             topDistractions:         Array(topDistractions),
             timeByWorkState:         timeByWorkState,
-            averageSwitchesPerMinute: avgSwitches
+            averageSwitchesPerMinute: avgSwitches,
+            totalBreakTime:          totalBreakTime,
+            breakCount:              breakCount,
+            pomodoroCompletedCycles: pomodoroCompletedCycles
         )
     }
 }

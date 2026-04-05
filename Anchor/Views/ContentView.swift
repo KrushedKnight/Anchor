@@ -8,7 +8,7 @@ struct ContentView: View {
     var sessionManager = SessionManager.shared
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
             if let summary = sessionManager.lastSummary {
                 SessionSummaryView(summary: summary)
             } else if sessionManager.isActive {
@@ -16,8 +16,10 @@ struct ContentView: View {
             } else {
                 TabRootView()
             }
+            Spacer(minLength: 0)
         }
         .frame(width: 420)
+        .frame(minHeight: 520)
         .background(Color.anchorLinen.ignoresSafeArea())
         .preferredColorScheme(.light)
         .onChange(of: sessionManager.isActive) { _, active in
@@ -114,12 +116,18 @@ private struct TabRootView: View {
 
 // MARK: - Home Tab
 
+private enum SessionMode: String, CaseIterable {
+    case freeform  = "Freeform"
+    case pomodoro  = "Pomodoro"
+}
+
 private struct HomeTab: View {
     @State private var taskTitle         = ""
     @State private var classifications:  [String: ContextFitLevel] = [:]
     @State private var runningApps:      [String]                  = []
     @State private var isClassifying     = false
     @State private var classifyDebounce: Task<Void, Never>?
+    @State private var sessionMode:      SessionMode = .freeform
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -140,6 +148,12 @@ private struct HomeTab: View {
                     }
             }
 
+            sessionModePicker
+
+            if sessionMode == .pomodoro {
+                pomodoroHint
+            }
+
             if !classifications.isEmpty || isClassifying {
                 ClassificationPreview(classifications: classifications, isLoading: isClassifying)
             }
@@ -151,6 +165,59 @@ private struct HomeTab: View {
         }
         .padding(20)
         .onAppear { refreshApps() }
+    }
+
+    private var sessionModePicker: some View {
+        HStack(spacing: 2) {
+            ForEach(SessionMode.allCases, id: \.self) { mode in
+                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { sessionMode = mode } }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: mode == .freeform ? "timer" : "clock.badge.checkmark")
+                            .font(.system(size: 9))
+                        Text(mode.rawValue)
+                            .font(.system(size: 11, weight: sessionMode == mode ? .medium : .regular))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                    .background(
+                        Group {
+                            if sessionMode == mode {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(Color.anchorLinen)
+                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.anchorBorder, lineWidth: 1))
+                            }
+                        }
+                    )
+                    .foregroundStyle(sessionMode == mode ? Color.anchorTerracotta : Color.anchorTextMuted)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var pomodoroHint: some View {
+        let work  = Int(PomodoroSettings.workMinutes)
+        let brk   = Int(PomodoroSettings.breakMinutes)
+        let long  = Int(PomodoroSettings.longBreakMinutes)
+        let cyc   = PomodoroSettings.cyclesBeforeLong
+
+        return HStack(spacing: 6) {
+            Image(systemName: "clock.badge.checkmark")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTerracotta.opacity(0.6))
+            Text("\(work)m work · \(brk)m break · \(long)m long every \(cyc)")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
+            Spacer()
+            Text("Settings →")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Color.anchorTerracotta.opacity(0.5))
+        }
+        .padding(8)
+        .background(Color.anchorSand.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -178,9 +245,18 @@ private struct HomeTab: View {
     }
 
     private func startSession() {
+        let pomoConfig: PomodoroConfig? = sessionMode == .pomodoro
+            ? PomodoroConfig(
+                workDuration:           PomodoroSettings.workMinutes * 60,
+                shortBreakDuration:     PomodoroSettings.breakMinutes * 60,
+                longBreakDuration:      PomodoroSettings.longBreakMinutes * 60,
+                cyclesBeforeLongBreak:  PomodoroSettings.cyclesBeforeLong
+              )
+            : nil
         SessionManager.shared.start(
             taskTitle:          taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-            appClassifications: classifications
+            appClassifications: classifications,
+            pomodoroConfig:     pomoConfig
         )
     }
 
@@ -528,6 +604,29 @@ private struct CompactAnalyticsTab: View {
     }
 }
 
+// MARK: - Pomodoro Settings (UserDefaults-backed)
+
+private enum PomodoroSettings {
+    private static let defaults = UserDefaults.standard
+
+    static var workMinutes: Double {
+        get { defaults.object(forKey: "pomo.work") as? Double ?? 25 }
+        set { defaults.set(newValue, forKey: "pomo.work") }
+    }
+    static var breakMinutes: Double {
+        get { defaults.object(forKey: "pomo.break") as? Double ?? 5 }
+        set { defaults.set(newValue, forKey: "pomo.break") }
+    }
+    static var longBreakMinutes: Double {
+        get { defaults.object(forKey: "pomo.longBreak") as? Double ?? 15 }
+        set { defaults.set(newValue, forKey: "pomo.longBreak") }
+    }
+    static var cyclesBeforeLong: Int {
+        get { defaults.object(forKey: "pomo.cycles") as? Int ?? 4 }
+        set { defaults.set(newValue, forKey: "pomo.cycles") }
+    }
+}
+
 // MARK: - Settings Tab
 
 private struct SettingsTab: View {
@@ -536,10 +635,19 @@ private struct SettingsTab: View {
     @State private var idleEnabled        = UserDefaults.standard.object(forKey: "observer.idle") as? Bool ?? true
     @State private var windowTitleEnabled = UserDefaults.standard.object(forKey: "observer.windowTitle") as? Bool ?? true
 
+    @State private var workMin      = PomodoroSettings.workMinutes
+    @State private var breakMin     = PomodoroSettings.breakMinutes
+    @State private var longBreakMin = PomodoroSettings.longBreakMinutes
+    @State private var cycles       = PomodoroSettings.cyclesBeforeLong
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ProviderSettingsSection()
+
+                Divider()
+
+                pomodoroSection
 
                 Divider()
 
@@ -553,6 +661,31 @@ private struct SettingsTab: View {
         }
         .sheet(isPresented: $showDebug) {
             DebugSheet()
+        }
+    }
+
+    private var pomodoroSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader("Pomodoro")
+
+            PomodoroStepperRow(label: "Work", value: $workMin, range: 10...90, unit: "min")
+                .onChange(of: workMin) { _, v in PomodoroSettings.workMinutes = v }
+            PomodoroStepperRow(label: "Break", value: $breakMin, range: 1...30, unit: "min")
+                .onChange(of: breakMin) { _, v in PomodoroSettings.breakMinutes = v }
+            PomodoroStepperRow(label: "Long break", value: $longBreakMin, range: 5...60, unit: "min")
+                .onChange(of: longBreakMin) { _, v in PomodoroSettings.longBreakMinutes = v }
+            HStack {
+                Text("Long break every")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
+                Spacer()
+                Stepper(value: $cycles, in: 2...8) {
+                    Text("\(cycles) cycles")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .controlSize(.mini)
+            }
+            .onChange(of: cycles) { _, v in PomodoroSettings.cyclesBeforeLong = v }
         }
     }
 
@@ -624,6 +757,29 @@ private struct ObserverToggle: View {
     }
 }
 
+// MARK: - Pomodoro Stepper Row
+
+private struct PomodoroStepperRow: View {
+    var label: String
+    @Binding var value: Double
+    var range: ClosedRange<Double>
+    var unit: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
+            Spacer()
+            Stepper(value: $value, in: range, step: 5) {
+                Text("\(Int(value)) \(unit)")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .controlSize(.mini)
+        }
+    }
+}
+
 // MARK: - Active Session (compact)
 
 private struct ActiveSessionCompactView: View {
@@ -631,28 +787,66 @@ private struct ActiveSessionCompactView: View {
     var engine         = DriftEngine.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Circle().fill(Color.anchorSage).frame(width: 7, height: 7)
-                        Text("You're anchored")
-                            .font(.system(.caption).weight(.semibold))
-                    }
-                    if let session = sessionManager.activeSession {
-                        Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.anchorTextMuted)
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            VStack(alignment: .leading, spacing: 16) {
+                sessionHeader
+
+                if sessionManager.isPaused {
+                    breakStateView
+                } else {
+                    focusStateView
+                }
+
+                if let pomo = sessionManager.pomodoroTimer, pomo.isWaitingForUser {
+                    pomodoroPromptBanner(pomo)
+                }
+
+                actionButtons
+            }
+            .padding(20)
+        }
+    }
+
+    private var sessionHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(sessionManager.isPaused ? Color.anchorBreakBlue : Color.anchorSage)
+                        .frame(width: 7, height: 7)
+                    Text(sessionManager.isPaused ? "On break" : "You're anchored")
+                        .font(.system(.caption).weight(.semibold))
+                }
+                if let session = sessionManager.activeSession {
+                    Text(session.taskTitle.isEmpty ? "Untitled" : session.taskTitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.anchorTextMuted)
+                }
+            }
+            Spacer()
+            if let pomo = sessionManager.pomodoroTimer {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(pomo.phase.rawValue)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(pomo.phase.isBreak ? Color.anchorBreakBlue : Color.anchorSage)
+                    HStack(spacing: 3) {
+                        ForEach(0..<pomo.config.cyclesBeforeLongBreak, id: \.self) { i in
+                            Circle()
+                                .fill(i < pomo.completedCycles ? Color.anchorSage : Color.anchorTextMuted.opacity(0.25))
+                                .frame(width: 5, height: 5)
+                        }
                     }
                 }
-                Spacer()
             }
+        }
+    }
 
+    private var focusStateView: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.anchorSand)
+                        Capsule().fill(Color.anchorSand)
                         Capsule()
                             .fill(engine.state.riskLevel.color)
                             .frame(width: geo.size.width * engine.state.focusScore)
@@ -682,12 +876,92 @@ private struct ActiveSessionCompactView: View {
                         .font(.system(size: 8))
                         .foregroundStyle(Color.anchorTextMuted)
                 }
+                Spacer()
+                if let pomo = sessionManager.pomodoroTimer, !pomo.isWaitingForUser {
+                    Text(formatCountdown(pomo.phaseRemaining))
+                        .font(.system(size: 13, weight: .bold, design: .serif))
+                        .foregroundStyle(Color.anchorText)
+                }
+            }
+        }
+    }
+
+    private var breakStateView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "cup.and.saucer.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.anchorBreakBlue)
+                if let start = sessionManager.breakTracker.currentBreakStart {
+                    Text(formatCountdown(Date.now.timeIntervalSince(start)))
+                        .font(.system(size: 18, weight: .bold, design: .serif))
+                        .foregroundStyle(Color.anchorBreakBlue)
+                }
+                Spacer()
+                if let pomo = sessionManager.pomodoroTimer, !pomo.isWaitingForUser {
+                    Text("\(formatCountdown(pomo.phaseRemaining)) left")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.anchorTextMuted)
+                }
             }
 
+            if sessionManager.breakTracker.breakCount > 0 {
+                Text("Break \(sessionManager.breakTracker.breakCount) · \(formatCountdown(sessionManager.activeWorkTime)) focused")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
+            }
+        }
+    }
+
+    private func pomodoroPromptBanner(_ pomo: PomodoroTimer) -> some View {
+        HStack {
+            Text(pomo.phase == .work ? "Time for a break!" : "Ready to focus?")
+                .font(.system(size: 12, weight: .medium))
+            Spacer()
+            if pomo.phase.isBreak {
+                Button("Skip") { pomo.skipBreak() }
+                    .font(.system(size: 11))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.anchorTextMuted)
+            }
+            Button(pomo.phase == .work ? "Take Break" : "Resume") {
+                pomo.advancePhase()
+            }
+            .font(.system(size: 11, weight: .medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.anchorTerracotta)
+        }
+        .padding(10)
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 8) {
+            if !sessionManager.isPaused && !sessionManager.isPomodoro {
+                Button("Take a Break") {
+                    SessionManager.shared.pause(reason: "manual")
+                }
+                .buttonStyle(AnchorSecondaryButtonStyle())
+            }
+            if sessionManager.isPaused && !sessionManager.isPomodoro {
+                Button("Resume") {
+                    SessionManager.shared.resume()
+                }
+                .buttonStyle(AnchorPrimaryButtonStyle())
+            }
             Button("Wrap Up") { SessionManager.shared.end() }
                 .buttonStyle(AnchorDestructiveButtonStyle())
         }
-        .padding(20)
+    }
+
+    private func formatCountdown(_ t: TimeInterval) -> String {
+        let s = max(0, Int(t))
+        let h = s / 3600
+        let m = (s % 3600) / 60
+        let sec = s % 60
+        return h > 0
+            ? String(format: "%d:%02d:%02d", h, m, sec)
+            : String(format: "%d:%02d", m, sec)
     }
 }
 
@@ -1044,6 +1318,19 @@ private struct AnchorPrimaryButtonStyle: ButtonStyle {
             .background(Color.anchorTerracotta.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.35))
             .foregroundStyle(.white)
             .cornerRadius(10)
+    }
+}
+
+private struct AnchorSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.body, weight: .medium))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.anchorSand.opacity(configuration.isPressed ? 0.6 : 1))
+            .foregroundStyle(Color.anchorText)
+            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.anchorBorder, lineWidth: 1))
     }
 }
 
