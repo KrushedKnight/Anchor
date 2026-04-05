@@ -12,7 +12,7 @@ struct BreakInterval {
 struct BreakTracker {
     private(set) var intervals: [BreakInterval] = []
 
-    var isOnBreak: Bool { intervals.last?.endedAt == nil }
+    var isOnBreak: Bool { !intervals.isEmpty && intervals.last?.endedAt == nil }
 
     var totalBreakTime: TimeInterval {
         intervals.map(\.duration).reduce(0, +)
