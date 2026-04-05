@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+dmg_staging/
+Anchor.dmg
+
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+.DS_Store
+
+# CocoaPods
+Pods/
+Podfile.lock

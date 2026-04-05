@@ -6,19 +6,8 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXContainerItemProxy section */
-		3FD430782F60F9C700474EB8 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 3F09AE1A2F5637F900E10730 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 3F09AE212F5637F900E10730;
-			remoteInfo = Anchor;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		3F09AE222F5637F900E10730 /* Anchor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Anchor.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3FD430742F60F9C700474EB8 /* AnchorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AnchorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -42,13 +31,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3FD430712F60F9C700474EB8 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -65,7 +47,6 @@
 			isa = PBXGroup;
 			children = (
 				3F09AE222F5637F900E10730 /* Anchor.app */,
-				3FD430742F60F9C700474EB8 /* AnchorTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,29 +76,6 @@
 			productReference = 3F09AE222F5637F900E10730 /* Anchor.app */;
 			productType = "com.apple.product-type.application";
 		};
-		3FD430732F60F9C700474EB8 /* AnchorTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 3FD4307A2F60F9C700474EB8 /* Build configuration list for PBXNativeTarget "AnchorTests" */;
-			buildPhases = (
-				3FD430702F60F9C700474EB8 /* Sources */,
-				3FD430712F60F9C700474EB8 /* Frameworks */,
-				3FD430722F60F9C700474EB8 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				3FD430792F60F9C700474EB8 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				3FD430752F60F9C700474EB8 /* AnchorTests */,
-			);
-			name = AnchorTests;
-			packageProductDependencies = (
-			);
-			productName = AnchorTests;
-			productReference = 3FD430742F60F9C700474EB8 /* AnchorTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -130,10 +88,6 @@
 				TargetAttributes = {
 					3F09AE212F5637F900E10730 = {
 						CreatedOnToolsVersion = 26.2;
-					};
-					3FD430732F60F9C700474EB8 = {
-						CreatedOnToolsVersion = 26.2;
-						TestTargetID = 3F09AE212F5637F900E10730;
 					};
 				};
 			};
@@ -152,20 +106,12 @@
 			projectRoot = "";
 			targets = (
 				3F09AE212F5637F900E10730 /* Anchor */,
-				3FD430732F60F9C700474EB8 /* AnchorTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		3F09AE202F5637F900E10730 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		3FD430722F60F9C700474EB8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -182,22 +128,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3FD430702F60F9C700474EB8 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		3FD430792F60F9C700474EB8 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 3F09AE212F5637F900E10730 /* Anchor */;
-			targetProxy = 3FD430782F60F9C700474EB8 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		3F09AE2B2F5637F900E10730 /* Debug */ = {
@@ -325,6 +256,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Anchor/Anchor.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -333,15 +267,17 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Anchor reads window titles to understand what you're working on and improve focus detection.";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Anchor reads the active tab URL from Chrome to track browser activity.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = krushedknight.Anchor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -357,6 +293,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Anchor/Anchor.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -365,15 +304,17 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Anchor reads window titles to understand what you're working on and improve focus detection.";
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Anchor reads the active tab URL from Chrome to track browser activity.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = krushedknight.Anchor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -381,46 +322,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
-		3FD4307B2F60F9C700474EB8 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2XF92W8XBB;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = krushedknight.AnchorTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Anchor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Anchor";
-			};
-			name = Debug;
-		};
-		3FD4307C2F60F9C700474EB8 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2XF92W8XBB;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = krushedknight.AnchorTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Anchor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Anchor";
 			};
 			name = Release;
 		};
@@ -441,15 +342,6 @@
 			buildConfigurations = (
 				3F09AE2E2F5637F900E10730 /* Debug */,
 				3F09AE2F2F5637F900E10730 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		3FD4307A2F60F9C700474EB8 /* Build configuration list for PBXNativeTarget "AnchorTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				3FD4307B2F60F9C700474EB8 /* Debug */,
-				3FD4307C2F60F9C700474EB8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
