@@ -143,11 +143,11 @@ struct SessionSummaryView: View {
                         Text("What went well? What derailed you?")
                             .font(.system(.caption))
                             .foregroundStyle(Color.anchorTextMuted.opacity(0.5))
-                            .padding(.horizontal, 5)
-                            .padding(.top, 8)
+                            .padding(8)
                             .allowsHitTesting(false)
                     }
                 }
+                .tint(Color.anchorTerracotta)
         }
     }
 
