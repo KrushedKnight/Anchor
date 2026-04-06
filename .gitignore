@@ -12,3 +12,12 @@ DerivedData/
 # CocoaPods
 Pods/
 Podfile.lock
+
+# Node
+node_modules/
+package.json
+package-lock.json
+
+# AI / templates
+CLAUDE.md
+blueprint.md
