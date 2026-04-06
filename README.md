@@ -21,6 +21,8 @@
     A local-only macOS app that monitors your behavior during focus sessions, detects distraction in real-time, and nudges you back on track.
     <br />
     <br />
+    <a href="#"><strong>Website (Coming Soon)</strong></a>
+    <br />
     <a href="https://github.com/KrushedKnight/Anchor/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     &middot;
     <a href="https://github.com/KrushedKnight/Anchor/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
@@ -176,16 +178,49 @@ Go to Settings → API and add a key for Anthropic, OpenAI, or configure a local
 <!-- ARCHITECTURE -->
 ## Architecture
 
+### Data Flow
+
 ```
-Anchor/
-├── Core/           # Event store, session management, task classification, user profiles
-├── Observers/      # App, browser, idle, and window title monitors
-├── Engine/         # Drift detection, behavior analysis, risk assessment
-├── Intervention/   # Notification delivery, escalation logic, nudge templates
-└── Views/          # SwiftUI views, floating widget, analytics
+┌─────────────┐     ┌────────────┐     ┌──────────────────┐     ┌─────────────┐     ┌────────────────────┐
+│  Observers   │────▶│ EventStore │────▶│ BehaviorAnalyzer │────▶│ DriftEngine │────▶│ InterventionEngine │
+│              │     │            │     │                  │     │             │     │                    │
+│ • App        │     │ Ring buffer│     │ Switch rates     │     │ WorkState   │     │ Cooldowns          │
+│ • Browser    │     │ (10k max)  │     │ Dwell times      │     │ Focus score │     │ Escalation         │
+│ • Idle       │     │            │     │ Idle ratio       │     │ Risk level  │     │ Recovery detection │
+│ • Window     │     │            │     │ Bounce detection │     │             │     │                    │
+└─────────────┘     └────────────┘     └──────────────────┘     └─────────────┘     └────────┬───────────┘
+                                                                                             │
+                                                                       ┌─────────────────────┘
+                                                                       ▼
+                                                              ┌──────────────────┐
+                                                              │  Notifications   │
+                                                              │  (macOS native)  │
+                                                              └──────────────────┘
 ```
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for detailed data flow diagrams, event catalogs, and engine invariants.
+### Module Layout
+
+```
+Anchor/
+├── Core/            # Event store, sessions, task classification, user profiles, break/pomodoro
+├── Observers/       # App monitor, Chrome tab tracker, idle detector, window title reader
+├── Engine/          # Drift detection, behavior analysis, work state machine, risk assessment
+├── Intervention/    # Escalation logic, cooldowns, notification delivery, nudge templates
+└── Views/           # SwiftUI tabs (Home/Analytics/Settings), floating widget, session summary
+```
+
+### Work States
+
+The engine classifies your behavior into one of six states every 2 seconds:
+
+| State | What it means |
+|---|---|
+| **Deep Focus** | Sustained on-task, low switching |
+| **Productive Switching** | On-task with healthy context switching |
+| **Stuck Cycling** | Rapidly bouncing between apps |
+| **Novelty Seeking** | High tab switching, off-task browsing |
+| **Passive Drift** | Lingering off-task without switching |
+| **Idle** | User away |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
