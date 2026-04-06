@@ -48,7 +48,13 @@ struct ContentView: View {
         }
         .onChange(of: sessionManager.lastSummary?.id) { _, id in
             if id != nil {
-                findMainWindow()?.deminiaturize(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    if let w = findMainWindow() {
+                        w.deminiaturize(nil)
+                        w.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                }
             }
         }
         .sheet(isPresented: Binding(get: { !onboardingComplete }, set: { _ in })) {

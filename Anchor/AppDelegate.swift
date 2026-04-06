@@ -71,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         widgetPanel = panel
         updateWidgetVisibility()
         observeSessionState()
+        observeLastSummary()
     }
 
     private func observeSessionState() {
@@ -82,6 +83,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.observeSessionState()
             }
         }
+    }
+
+    private var lastSummaryObservationStarted = false
+
+    private func observeLastSummary() {
+        withObservationTracking {
+            _ = SessionManager.shared.lastSummary
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleSummaryChange()
+                self?.observeLastSummary()
+            }
+        }
+    }
+
+    private func handleSummaryChange() {
+        if SessionManager.shared.lastSummary != nil {
+            if let w = mainWindow() {
+                w.deminiaturize(nil)
+                w.makeKeyAndOrderFront(nil)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private func mainWindow() -> NSWindow? {
+        NSApp.windows.first { !($0 is NSPanel) }
     }
 
     private func updateWidgetVisibility() {
