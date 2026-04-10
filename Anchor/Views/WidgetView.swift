@@ -59,7 +59,7 @@ struct WidgetView: View {
             Text("·")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Color.widgetSeparator)
-            Text(collapsedTimerText)
+            Text(collapsedRightText)
                 .font(.system(size: 11, weight: .medium, design: .serif))
                 .foregroundStyle(Color.widgetAppName)
         }
@@ -71,14 +71,21 @@ struct WidgetView: View {
         .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
     }
 
-    private var collapsedTimerText: String {
-        if sessionManager.isPaused {
-            return breakElapsedFormatted
+    private var collapsedRightText: String {
+        if focusTier == .lockedIn && engine.state.focusStreakSeconds >= 600 {
+            return formatStreak(engine.state.focusStreakSeconds)
         }
-        if let pomo = sessionManager.pomodoroTimer {
-            return formatInterval(pomo.phaseRemaining)
+        return "Anchor"
+    }
+
+    private func formatStreak(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        if h > 0 {
+            return "\(h)h \(m)m"
         }
-        return workTimeFormatted
+        return "\(m)m"
     }
 
     // MARK: - Expanded (Full)
@@ -271,7 +278,7 @@ struct WidgetView: View {
 
 // MARK: - Focus Tier
 
-private enum FocusTier {
+private enum FocusTier: Equatable {
     case lockedIn, drifting, offTask, onBreak
 
     var label: String {

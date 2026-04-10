@@ -532,7 +532,7 @@ struct AnalyticsView: View {
     private func barColor(for score: Double) -> Color {
         if score >= 0.7 { return .anchorSage }
         if score >= 0.4 { return .anchorAmber }
-        return Color(red: 0.78, green: 0.29, blue: 0.25)
+        return .anchorRed
     }
 
     private func cleanContextLabel(_ context: String) -> String {
@@ -629,7 +629,7 @@ private struct NudgeRing: View {
     private var ringColor: Color {
         if rate >= 0.6 { return .anchorSage }
         if rate >= 0.3 { return .anchorAmber }
-        return Color(red: 0.78, green: 0.29, blue: 0.25)
+        return .anchorRed
     }
 }
 

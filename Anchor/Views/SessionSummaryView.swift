@@ -3,25 +3,31 @@ import SwiftUI
 struct SessionSummaryView: View {
     var summary: SessionSummary
     @State private var note: String = ""
+    @State private var showDetails: Bool = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                focusScoreSection
-                timeBreakdownSection
-                keyStatsSection
-                if !summary.topDistractions.isEmpty {
-                    distractionsSection
-                }
-                noteSection
-                Button("Start Fresh") { saveAndDismiss() }
-                    .buttonStyle(PrimaryButtonStyle())
+        VStack(alignment: .center, spacing: 16) {
+            headline
+            focusBar
+                .padding(.horizontal, 24)
+            noteSection
+                .padding(.horizontal, 24)
+            actionButtons
+                .padding(.horizontal, 24)
+            DisclosureGroup(isExpanded: $showDetails) {
+                detailsContent
+                    .padding(.top, 8)
+            } label: {
+                Text("Details")
+                    .font(.system(.caption, weight: .medium))
+                    .foregroundStyle(Color.anchorTextMuted)
             }
-            .padding(28)
+            .padding(.horizontal, 24)
+            .animation(.easeInOut(duration: 0.2), value: showDetails)
         }
-        .frame(width: 420)
-        .frame(minHeight: 520)
+        .padding(.vertical, 20)
+        .frame(width: 600)
+        .frame(minHeight: 350)
         .onAppear { note = summary.note }
     }
 
@@ -32,56 +38,29 @@ struct SessionSummaryView: View {
         SessionManager.shared.dismissSummary()
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Anchor")
-                .font(.system(.title2, design: .serif).weight(.heavy))
-            Text("session complete.")
+    private var headline: some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text("Session Complete")
                 .font(.system(.caption))
                 .foregroundStyle(Color.anchorTextMuted)
             Text(summary.taskTitle.isEmpty ? "Untitled session" : summary.taskTitle)
-                .font(.system(.body).weight(.semibold))
+                .font(.system(.body, weight: .medium))
                 .foregroundStyle(Color.anchorText)
-                .padding(.top, 2)
+            Text(String(format: "%.0f%%", summary.focusScoreAvg * 100))
+                .font(.system(size: 48, weight: .heavy, design: .serif))
+                .foregroundStyle(scoreColor)
+            Text(oneLinerSummary)
+                .font(.system(.caption))
+                .foregroundStyle(Color.anchorTextMuted)
         }
     }
 
-    private var focusScoreSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SummaryLabel("Focus Score")
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(String(format: "%.0f%%", summary.focusScoreAvg * 100))
-                    .font(.system(size: 36, weight: .heavy, design: .serif))
-                    .foregroundStyle(scoreColor)
-                Text("avg")
-                    .font(.system(.caption))
-                    .foregroundStyle(Color.anchorTextMuted)
-            }
-            HStack(spacing: 12) {
-                ScoreStat(label: "low",  value: summary.focusScoreMin)
-                ScoreStat(label: "high", value: summary.focusScoreMax)
-                ScoreStat(label: "final", value: summary.focusScoreFinal)
-            }
-        }
-    }
-
-    private var timeBreakdownSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SummaryLabel("Time Breakdown")
-            SummaryRow(label: "Duration",     value: formatDuration(summary.duration))
-            if summary.breakCount > 0 {
-                SummaryRow(label: "Active time",  value: formatDuration(summary.activeWorkTime))
-                SummaryRow(label: "Break time",   value: formatDuration(summary.totalBreakTime), color: .anchorBreakBlue)
-                SummaryRow(label: "Breaks taken",  value: "\(summary.breakCount)")
-            }
-            if let cycles = summary.pomodoroCompletedCycles {
-                SummaryRow(label: "Pomodoro cycles", value: "\(cycles)")
-            }
-            SummaryRow(label: "Focused",      value: formatDuration(summary.timeStable),  color: .anchorSage)
-            SummaryRow(label: "At risk",      value: formatDuration(summary.timeAtRisk),  color: .anchorAmber)
-            SummaryRow(label: "Drifted",      value: formatDuration(summary.timeDrift),   color: Color(red: 0.78, green: 0.29, blue: 0.25))
-            focusBar
-        }
+    private var oneLinerSummary: String {
+        let focused = formatDuration(summary.timeStable)
+        let drifted = formatDuration(summary.timeDrift)
+        let interventions = summary.interventionCount
+        let intLabel = interventions == 1 ? "1 intervention" : "\(interventions) interventions"
+        return "\(focused) focused · \(drifted) drifted · \(intLabel)"
     }
 
     private var focusBar: some View {
@@ -98,64 +77,87 @@ struct SessionSummaryView: View {
                     .fill(Color.anchorAmber.opacity(0.8))
                     .frame(width: geo.size.width * atRiskFrac)
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color(red: 0.78, green: 0.29, blue: 0.25).opacity(0.8))
+                    .fill(Color.anchorRed.opacity(0.8))
                     .frame(maxWidth: .infinity)
             }
         }
         .frame(height: 8)
         .cornerRadius(4)
-        .padding(.top, 2)
-    }
-
-    private var keyStatsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SummaryLabel("Stats")
-            SummaryRow(label: "Off-task",       value: formatDuration(summary.offTaskTime))
-            SummaryRow(label: "Best streak",    value: formatDuration(summary.longestFocusStreak))
-            SummaryRow(label: "Interventions",  value: interventionLabel)
-        }
-    }
-
-    private var distractionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SummaryLabel("Top Distractions")
-            ForEach(summary.topDistractions, id: \.context) { entry in
-                SummaryRow(label: entry.context, value: formatDuration(entry.seconds), color: Color(red: 0.78, green: 0.29, blue: 0.25).opacity(0.8))
-            }
-        }
     }
 
     private var noteSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SummaryLabel("Session Note")
-            TextEditor(text: $note)
-                .font(.system(.caption))
-                .scrollContentBackground(.hidden)
-                .background(Color.anchorSand)
-                .cornerRadius(6)
-                .frame(minHeight: 64, maxHeight: 120)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.anchorTextMuted.opacity(0.2), lineWidth: 1)
-                )
-                .overlay(alignment: .topLeading) {
-                    if note.isEmpty {
-                        Text("What went well? What derailed you?")
-                            .font(.system(.caption))
-                            .foregroundStyle(Color.anchorTextMuted.opacity(0.5))
-                            .padding(8)
-                            .allowsHitTesting(false)
-                    }
+        TextEditor(text: $note)
+            .font(.system(.caption))
+            .scrollContentBackground(.hidden)
+            .background(Color.anchorSand)
+            .cornerRadius(6)
+            .frame(minHeight: 60, maxHeight: 100)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.anchorTextMuted.opacity(0.2), lineWidth: 1)
+            )
+            .overlay(alignment: .topLeading) {
+                if note.isEmpty {
+                    Text("What went well? What derailed you?")
+                        .font(.system(.caption))
+                        .foregroundStyle(Color.anchorTextMuted.opacity(0.5))
+                        .padding(8)
+                        .allowsHitTesting(false)
                 }
-                .tint(Color.anchorTerracotta)
+            }
+            .tint(Color.anchorTerracotta)
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 12) {
+            Button("Start Fresh") { saveAndDismiss() }
+                .buttonStyle(AnchorPrimaryButtonStyle())
+            Button("Done") { saveAndDismiss() }
+                .font(.system(.body, weight: .medium))
+                .foregroundStyle(Color.anchorTextMuted)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
         }
+    }
+
+    private var detailsContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SummaryRow(label: "Best streak",    value: formatDuration(summary.longestFocusStreak))
+            SummaryRow(label: "Off-task",       value: formatDuration(summary.offTaskTime))
+            SummaryRow(label: "Score low/high/final", value: scoreSummary)
+            SummaryRow(label: "Duration",       value: formatDuration(summary.duration))
+            if summary.breakCount > 0 {
+                SummaryRow(label: "Active time",  value: formatDuration(summary.activeWorkTime))
+                SummaryRow(label: "Break time",   value: formatDuration(summary.totalBreakTime), color: .anchorBreakBlue)
+                SummaryRow(label: "Breaks taken", value: "\(summary.breakCount)")
+            }
+            if let cycles = summary.pomodoroCompletedCycles {
+                SummaryRow(label: "Pomodoro cycles", value: "\(cycles)")
+            }
+            SummaryRow(label: "Interventions",  value: interventionLabel)
+            if !summary.topDistractions.isEmpty {
+                SummaryLabel("Top Distractions")
+                    .padding(.top, 4)
+                ForEach(summary.topDistractions, id: \.context) { entry in
+                    SummaryRow(label: entry.context, value: formatDuration(entry.seconds), color: .anchorRed.opacity(0.8))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var scoreSummary: String {
+        let lo   = String(format: "%.0f%%", summary.focusScoreMin   * 100)
+        let hi   = String(format: "%.0f%%", summary.focusScoreMax   * 100)
+        let fin  = String(format: "%.0f%%", summary.focusScoreFinal * 100)
+        return "\(lo) / \(hi) / \(fin)"
     }
 
     private var scoreColor: Color {
         switch summary.focusScoreAvg {
         case 0.7...: return .anchorSage
         case 0.4...: return .anchorAmber
-        default:     return Color(red: 0.78, green: 0.29, blue: 0.25)
+        default:     return .anchorRed
         }
     }
 
@@ -204,7 +206,7 @@ private struct SummaryRow: View {
             Text(label)
                 .font(.system(.caption))
                 .foregroundStyle(Color.anchorTextMuted)
-                .frame(width: 110, alignment: .leading)
+                .frame(width: 160, alignment: .leading)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Text(value)
@@ -226,17 +228,5 @@ private struct ScoreStat: View {
                 .font(.system(size: 9))
                 .foregroundStyle(Color.anchorTextMuted)
         }
-    }
-}
-
-private struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.body, weight: .medium))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Color.anchorTerracotta.opacity(configuration.isPressed ? 0.75 : 1))
-            .foregroundStyle(.white)
-            .cornerRadius(8)
     }
 }
