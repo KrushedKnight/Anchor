@@ -42,6 +42,6 @@ struct RuleConfig {
         republishInterval:          30,
         recoveryConfirmationTime:   15,
         recoveryFitThreshold:       0.7,
-        distractionPressureDecay:   60
+        distractionPressureDecay:   30
     )
 }
