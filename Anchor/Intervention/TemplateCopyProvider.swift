@@ -24,6 +24,9 @@ struct TemplateCopyProvider: NudgeCopyProviding {
     ) -> String {
         switch (reason, level) {
 
+        case (.offTask, .ambient):
+            return task.isEmpty ? "Drifting" : "Back to \(task)"
+
         case (.offTask, .soft):
             return task.isEmpty
                 ? pick(["Getting sidetracked?", "Losing focus?", "Drift check."])
@@ -34,11 +37,17 @@ struct TemplateCopyProvider: NudgeCopyProviding {
                 ? "You've been off-task for a while"
                 : "Still on \(context)?"
 
+        case (.highSwitching, .ambient):
+            return "Spreading thin"
+
         case (.highSwitching, .soft):
             return pick(["Spreading thin?", "Lots of switching.", "Staying scattered?"])
 
         case (.highSwitching, .strong):
             return "You've been scattered for a while"
+
+        case (.idle, .ambient):
+            return "Away"
 
         case (.idle, .soft):
             return pick(["Still there?", "Taking a break?", "Zoned out?"])
@@ -47,6 +56,7 @@ struct TemplateCopyProvider: NudgeCopyProviding {
             return "Long break — still with it?"
 
         default:
+            if level == .ambient { return "Drifting" }
             return level == .soft ? "Focus check." : "You've drifted"
         }
     }

@@ -41,7 +41,8 @@ final class NotificationHandler: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func fire(_ intervention: Intervention) {
-        print("[NotificationHandler] firing: \(intervention.title)")
+        guard intervention.channel == .notification else { return }
+
         let content       = UNMutableNotificationContent()
         content.title     = intervention.title
         content.body      = intervention.body

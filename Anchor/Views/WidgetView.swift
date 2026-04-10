@@ -6,14 +6,22 @@ struct WidgetView: View {
 
     @State private var isHovered = false
 
+    @State private var urgency: WidgetUrgency = .calm
+    @State private var nudgeTitle: String = ""
+    @State private var nudgeBody: String = ""
+    @State private var glowPhase: Bool = false
+    @State private var subscriptionId: UUID?
+    @State private var listenTask: Task<Void, Never>?
+    @State private var collapseTimer: Task<Void, Never>?
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             ZStack(alignment: .topTrailing) {
                 Color.clear
-                if isHovered {
+                if isHovered || urgency == .assertive {
                     expandedContent
                         .onHover { hovering in
-                            if !hovering {
+                            if !hovering && urgency != .assertive {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                     isHovered = false
                                 }
@@ -33,6 +41,91 @@ struct WidgetView: View {
             .frame(width: 240, height: 140)
         }
         .preferredColorScheme(.light)
+        .onAppear { startListening() }
+        .onDisappear { stopListening() }
+        .onChange(of: engine.state.riskLevel) {
+            if engine.state.riskLevel == .stable {
+                clearUrgency()
+            }
+        }
+    }
+
+    // MARK: - Intervention Listener
+
+    private func startListening() {
+        let (id, stream) = InterventionBus.shared.subscribe()
+        subscriptionId = id
+        listenTask = Task { @MainActor in
+            for await intervention in stream {
+                guard intervention.channel == .widget else { continue }
+                handleWidgetIntervention(intervention)
+            }
+        }
+    }
+
+    private func stopListening() {
+        listenTask?.cancel()
+        listenTask = nil
+        collapseTimer?.cancel()
+        collapseTimer = nil
+        if let id = subscriptionId {
+            InterventionBus.shared.unsubscribe(id)
+            subscriptionId = nil
+        }
+    }
+
+    private func handleWidgetIntervention(_ intervention: Intervention) {
+        nudgeTitle = intervention.title
+        nudgeBody  = intervention.body
+
+        switch intervention.level {
+        case .ambient:
+            if urgency < .assertive {
+                withAnimation(.easeInOut(duration: 0.6)) { urgency = .ambient }
+                startBreathing()
+            }
+        case .soft:
+            collapseTimer?.cancel()
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                urgency = .assertive
+                isHovered = false
+            }
+            scheduleAutoCollapse()
+        default:
+            break
+        }
+    }
+
+    private func startBreathing() {
+        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            glowPhase = true
+        }
+    }
+
+    private func scheduleAutoCollapse() {
+        collapseTimer?.cancel()
+        collapseTimer = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(InterventionConfig.defaults.assertiveDisplayTime))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                if urgency == .assertive { urgency = .ambient }
+            }
+        }
+    }
+
+    private func dismissNudge() {
+        collapseTimer?.cancel()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            urgency = .ambient
+        }
+    }
+
+    private func clearUrgency() {
+        collapseTimer?.cancel()
+        withAnimation(.easeOut(duration: 0.4)) {
+            urgency = .calm
+            glowPhase = false
+        }
     }
 
     // MARK: - Focus Tier
@@ -54,22 +147,48 @@ struct WidgetView: View {
             Circle()
                 .fill(focusTier.dotColor)
                 .frame(width: 7, height: 7)
-            Text(focusTier.label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(focusTier.textColor)
-            Text("·")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.widgetSeparator)
-            Text(collapsedRightText)
-                .font(.system(size: 11, weight: .medium, design: .serif))
-                .foregroundStyle(Color.widgetAppName)
+
+            if urgency == .ambient {
+                Text(nudgeTitle.isEmpty ? focusTier.label : nudgeTitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(focusTier.textColor)
+                Text("·")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.widgetSeparator)
+                Text(taskNameForPill)
+                    .font(.system(size: 11, weight: .medium, design: .serif))
+                    .foregroundStyle(Color.widgetAppName)
+                    .lineLimit(1)
+            } else {
+                Text(focusTier.label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(focusTier.textColor)
+                Text("·")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.widgetSeparator)
+                Text(collapsedRightText)
+                    .font(.system(size: 11, weight: .medium, design: .serif))
+                    .foregroundStyle(Color.widgetAppName)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(Color.anchorLinen)
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.widgetBorder, lineWidth: 1))
+        .overlay(Capsule().stroke(pillBorderColor, lineWidth: urgency == .ambient ? 1.5 : 1))
+        .shadow(
+            color: urgency == .ambient ? focusTier.dotColor.opacity(glowPhase ? 0.5 : 0.0) : .clear,
+            radius: glowPhase ? 8 : 0
+        )
         .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
+    }
+
+    private var pillBorderColor: Color {
+        urgency == .ambient ? focusTier.dotColor.opacity(0.6) : Color.widgetBorder
+    }
+
+    private var taskNameForPill: String {
+        sessionManager.activeSession?.taskTitle ?? "Focus"
     }
 
     private var collapsedRightText: String {
@@ -94,7 +213,12 @@ struct WidgetView: View {
     private var expandedContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             topRow
-            taskName
+
+            if urgency == .assertive {
+                nudgeBanner
+            } else {
+                taskName
+            }
 
             if let pomo = sessionManager.pomodoroTimer {
                 pomodoroSection(pomo)
@@ -113,9 +237,34 @@ struct WidgetView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.widgetBorder, lineWidth: 1)
+                .stroke(expandedBorderColor, lineWidth: urgency != .calm ? 1.5 : 1)
+        )
+        .shadow(
+            color: urgency != .calm ? focusTier.dotColor.opacity(glowPhase ? 0.35 : 0.0) : .clear,
+            radius: glowPhase ? 10 : 0
         )
         .transition(.scale(scale: 0.95, anchor: .topTrailing).combined(with: .opacity))
+    }
+
+    private var expandedBorderColor: Color {
+        urgency != .calm ? focusTier.dotColor.opacity(0.5) : Color.widgetBorder
+    }
+
+    // MARK: - Nudge Banner
+
+    private var nudgeBanner: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(nudgeTitle)
+                .font(.system(size: 16, weight: .medium, design: .serif))
+                .foregroundStyle(focusTier.textColor)
+                .lineLimit(2)
+            if !nudgeBody.isEmpty {
+                Text(nudgeBody)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.widgetAppName)
+                    .lineLimit(2)
+            }
+        }
     }
 
     // MARK: - Expanded Subviews
@@ -242,6 +391,12 @@ struct WidgetView: View {
                 }
             }
             Spacer()
+
+            if urgency == .assertive {
+                Button("Dismiss") { dismissNudge() }
+                    .buttonStyle(WidgetSmallButtonStyle())
+            }
+
             if !sessionManager.isPaused && !sessionManager.isPomodoro {
                 Button("Break") {
                     SessionManager.shared.pause(reason: "manual")
@@ -275,6 +430,13 @@ struct WidgetView: View {
             ? String(format: "%d:%02d:%02d", h, m, s)
             : String(format: "%d:%02d", m, s)
     }
+}
+
+// MARK: - Widget Urgency
+
+private enum WidgetUrgency: Int, Comparable {
+    case calm = 0, ambient = 1, assertive = 2
+    static func < (l: WidgetUrgency, r: WidgetUrgency) -> Bool { l.rawValue < r.rawValue }
 }
 
 // MARK: - Focus Tier

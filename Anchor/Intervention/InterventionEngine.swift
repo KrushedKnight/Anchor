@@ -9,8 +9,8 @@ final class InterventionEngine {
     private let copyProvider:    NudgeCopyProviding
 
     private var driftCycleStart: Date?
-    private var lastFiredAt:     Date?
-    private var currentLevel:    Intervention.Level = .soft
+    private var lastFiredAt:     [Intervention.Level: Date] = [:]
+    private var currentLevel:    Intervention.Level = .ambient
 
     private var task: Task<Void, Never>?
 
@@ -40,36 +40,33 @@ final class InterventionEngine {
     }
 
     private func handle(_ decision: EngineDecision) {
-        print("[InterventionEngine] received decision: riskState=\(decision.riskState), type=\(decision.type)")
         if decision.riskState == .stable {
-            print("[InterventionEngine] stable → resetCycle")
             resetCycle()
             return
         }
 
-        if decision.type == .none { print("[InterventionEngine] type=.none, skipping"); return }
+        if decision.type == .none { return }
+
+        let now = Date.now
 
         if driftCycleStart == nil {
-            driftCycleStart = .now
+            driftCycleStart = now
         }
 
-        let cooldown: TimeInterval = currentLevel == .soft ? config.softCooldown : config.strongCooldown
-        if let last = lastFiredAt, Date.now.timeIntervalSince(last) < cooldown {
-            print("[InterventionEngine] cooldown active, \(Int(Date.now.timeIntervalSince(last)))s elapsed of \(Int(cooldown))s")
+        let elapsed = now.timeIntervalSince(driftCycleStart!)
+        currentLevel = resolveLevel(elapsed: elapsed)
+
+        let cooldown = cooldownFor(currentLevel)
+        if let last = lastFiredAt[currentLevel], now.timeIntervalSince(last) < cooldown {
             return
         }
 
-        if let cycleStart = driftCycleStart,
-           Date.now.timeIntervalSince(cycleStart) >= config.escalationDelay {
-            currentLevel = .strong
-        }
-
-        let channel: Intervention.Channel = decision.channelHint == .overlay ? .overlay : .notification
+        let channel: Intervention.Channel = currentLevel == .strong ? .notification : .widget
         let copy = copyProvider.copy(decision: decision, level: currentLevel)
 
         let intervention = Intervention(
             id:             UUID(),
-            ts:             .now,
+            ts:             now,
             level:          currentLevel,
             channel:        channel,
             title:          copy.title,
@@ -78,15 +75,31 @@ final class InterventionEngine {
             sourceDecision: decision
         )
 
-        lastFiredAt = .now
+        lastFiredAt[currentLevel] = now
         SessionStatsAccumulator.shared.recordIntervention(level: currentLevel)
-        print("[InterventionEngine] firing intervention: level=\(currentLevel), title=\(intervention.title), channel=\(intervention.channel)")
         interventionBus.publish(intervention)
+    }
+
+    private func resolveLevel(elapsed: TimeInterval) -> Intervention.Level {
+        if elapsed >= config.ambientToSoftDelay + config.softToStrongDelay {
+            return .strong
+        } else if elapsed >= config.ambientToSoftDelay {
+            return .soft
+        }
+        return .ambient
+    }
+
+    private func cooldownFor(_ level: Intervention.Level) -> TimeInterval {
+        switch level {
+        case .ambient: config.ambientCooldown
+        case .soft:    config.softCooldown
+        case .strong:  config.strongCooldown
+        }
     }
 
     private func resetCycle() {
         driftCycleStart = nil
-        lastFiredAt     = nil
-        currentLevel    = .soft
+        lastFiredAt     = [:]
+        currentLevel    = .ambient
     }
 }

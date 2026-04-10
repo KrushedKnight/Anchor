@@ -37,6 +37,8 @@ enum UserProfileUpdater {
         // Intervention effectiveness
         for outcome in interventionOutcomes {
             switch outcome.level {
+            case .ambient:
+                break
             case .soft:
                 profile.softInterventionsFired += 1
                 if outcome.recovered { profile.softInterventionsRecovered += 1 }

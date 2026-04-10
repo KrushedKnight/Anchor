@@ -40,9 +40,9 @@ enum UserProfileTuner {
         // Escalation delay: if soft works well, wait longer before escalating.
         // If soft fails but strong works, escalate faster.
         if softRate > 0.6 {
-            config.escalationDelay = clamp(base.escalationDelay * 1.5, min: 5, max: 90)
+            config.softToStrongDelay = clamp(base.softToStrongDelay * 1.5, min: 5, max: 90)
         } else if softRate < 0.3 && strongRate > 0.5 && profile.softInterventionsFired >= 10 {
-            config.escalationDelay = clamp(base.escalationDelay * 0.7, min: 3, max: 90)
+            config.softToStrongDelay = clamp(base.softToStrongDelay * 0.7, min: 3, max: 90)
         }
 
         return config

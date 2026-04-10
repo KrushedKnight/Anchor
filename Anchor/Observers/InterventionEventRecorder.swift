@@ -26,8 +26,9 @@ final class InterventionEventRecorder {
     private func record(_ intervention: Intervention) {
         let sessionId = SessionManager.shared.activeSession?.id.uuidString ?? ""
         let level = switch intervention.level {
-            case .soft:   "soft"
-            case .strong: "strong"
+            case .ambient: "ambient"
+            case .soft:    "soft"
+            case .strong:  "strong"
         }
         let triggeringState = switch intervention.sourceDecision.riskState {
             case .stable: "stable"
