@@ -46,6 +46,18 @@ final class TaskClassifier {
         }
     }
 
+    func classifyTaskProfile(task: String) async throws -> TaskProfile {
+        guard !task.isEmpty else {
+            return TaskProfile()
+        }
+
+        switch APIKeyStore.shared.activeProvider {
+        case .anthropic: return try await classifyTaskProfileWithAnthropic(task: task)
+        case .openAI:    return try await classifyTaskProfileWithOpenAI(task: task)
+        case .ollama:    return try await classifyTaskProfileWithOllama(task: task)
+        }
+    }
+
     private func classifyWithAnthropic(task: String, apps: [String]) async throws -> AppClassification {
         guard let apiKey = APIKeyStore.shared.retrieve(for: .anthropic) else {
             throw ClassifierError.noAPIKey
@@ -294,6 +306,145 @@ final class TaskClassifier {
         A domain like youtube.com could be on_task if the user is watching tutorials relevant to their task. \
         No other text.
         """
+    }
+
+    private func classifyTaskProfileWithAnthropic(task: String) async throws -> TaskProfile {
+        guard let apiKey = APIKeyStore.shared.retrieve(for: .anthropic) else {
+            throw ClassifierError.noAPIKey
+        }
+
+        var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+        req.httpMethod = "POST"
+        req.setValue(apiKey,             forHTTPHeaderField: "x-api-key")
+        req.setValue("2023-06-01",       forHTTPHeaderField: "anthropic-version")
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+
+        let system = taskProfileSystemPrompt()
+        let prompt = "Task: \(task)"
+
+        let body: [String: Any] = [
+            "model":      "claude-haiku-4-5-20251001",
+            "max_tokens": 32,
+            "system":     system,
+            "messages":   [["role": "user", "content": prompt]]
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
+        let response  = try JSONDecoder().decode(AnthropicMessagesResponse.self, from: data)
+
+        guard let text = response.content.first?.text else {
+            throw ClassifierError.emptyResponse
+        }
+        return parseTaskProfile(text)
+    }
+
+    private func classifyTaskProfileWithOpenAI(task: String) async throws -> TaskProfile {
+        guard let apiKey = APIKeyStore.shared.retrieve(for: .openAI) else {
+            throw ClassifierError.noAPIKey
+        }
+
+        var req = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+
+        let system = taskProfileSystemPrompt()
+        let prompt = "Task: \(task)"
+
+        let body: [String: Any] = [
+            "model":      "gpt-4o-mini",
+            "max_tokens": 32,
+            "messages": [
+                ["role": "system", "content": system],
+                ["role": "user",   "content": prompt]
+            ]
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
+        let response  = try JSONDecoder().decode(OpenAICompletionResponse.self, from: data)
+
+        guard let text = response.choices.first?.message.content else {
+            throw ClassifierError.emptyResponse
+        }
+        return parseTaskProfile(text)
+    }
+
+    private func classifyTaskProfileWithOllama(task: String) async throws -> TaskProfile {
+        let endpoint  = APIKeyStore.shared.ollamaConfig.endpoint
+        let modelName = APIKeyStore.shared.ollamaConfig.modelName
+
+        let urlString = endpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/chat"
+        guard let url = URL(string: urlString) else {
+            throw ClassifierError.invalidEndpoint
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+
+        let system = taskProfileSystemPrompt()
+        let prompt = "Task: \(task)"
+
+        let body: [String: Any] = [
+            "model": modelName,
+            "messages": [
+                ["role": "system", "content": system],
+                ["role": "user",   "content": prompt]
+            ],
+            "stream": false
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, httpResponse) = try await URLSession.shared.data(for: req)
+        if let http = httpResponse as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw ClassifierError.httpError(http.statusCode)
+        }
+        let response  = try JSONDecoder().decode(OllamaChatResponse.self, from: data)
+
+        guard !response.message.content.isEmpty else {
+            throw ClassifierError.emptyResponse
+        }
+        return parseTaskProfile(response.message.content)
+    }
+
+    private func taskProfileSystemPrompt() -> String {
+        """
+        You analyze a task to estimate its context-switching profile. \
+        Reply with valid JSON: {"switching_multiplier": 1.0, "distraction_priority": "normal"}. \
+        switching_multiplier: 0.5–1.5. Low (0.5–0.7) for deep focus (writing code, design). Normal (0.9–1.1) for mixed tasks. High (1.2–1.5) for high-switching tasks (code review, project management). \
+        distraction_priority: "low" (task allows flexibility), "normal" (standard), or "high" (minimize drift). \
+        Only return the JSON, no other text.
+        """
+    }
+
+    private func parseTaskProfile(_ text: String) -> TaskProfile {
+        guard let start = text.firstIndex(of: "{"),
+              let end   = text.lastIndex(of: "}")
+        else { return TaskProfile() }
+
+        let slice = String(text[start...end])
+        guard let jsonData = slice.data(using: .utf8),
+              let json     = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        else { return TaskProfile() }
+
+        let switching = (json["switching_multiplier"] as? NSNumber)?.doubleValue ?? 1.0
+        let priority  = (json["distraction_priority"] as? String) ?? "normal"
+
+        let switchingClamped = max(0.5, min(1.5, switching))
+        let priorityEnum = DistractionPriority(rawValue: priority) ?? .normal
+
+        return TaskProfile(
+            switchingMultiplier: switchingClamped,
+            distractionPriority: priorityEnum
+        )
     }
 
     private func parseDomainLabel(_ text: String) -> ContextFitLevel {

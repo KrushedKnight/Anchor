@@ -313,6 +313,7 @@ private struct HomeTab: View {
             appClassifications: classifications,
             pomodoroConfig:     pomoConfig
         )
+        SessionManager.shared.classifyTaskProfile()
     }
 
     private func scheduleClassification(for value: String) {

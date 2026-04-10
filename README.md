@@ -291,16 +291,6 @@ Project Link: [https://github.com/KrushedKnight/Anchor](https://github.com/Krush
 
 
 
-<!-- ACKNOWLEDGMENTS -->
-## Acknowledgments
-
-* [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
-* [Shields.io](https://shields.io)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
 <!-- MARKDOWN LINKS & IMAGES -->
 [contributors-shield]: https://img.shields.io/github/contributors/KrushedKnight/Anchor.svg?style=for-the-badge
 [contributors-url]: https://github.com/KrushedKnight/Anchor/graphs/contributors

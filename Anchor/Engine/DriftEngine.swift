@@ -271,7 +271,8 @@ final class DriftEngine {
         if snap.isIdle { return .idle }
 
         let highDwell    = snap.dwellInCurrentContext > config.highDwellThreshold
-        let lowSwitching = snap.switchesPerMinute < 6
+        let expectedSwitchRate = 6.0 * (SessionManager.shared.activeSession?.taskProfile.switchingMultiplier ?? 1.0)
+        let lowSwitching = snap.switchesPerMinute < expectedSwitchRate
         let onTask       = contextFit > 0.7
         let offTask      = contextFit < 0.3
 
@@ -349,14 +350,26 @@ final class DriftEngine {
             let sessionInterventions = SessionStatsAccumulator.shared.interventionCount
             let scoreLow = focusScore < 0.5
             let alreadyWarned = sessionInterventions > 0
+            let distractionPriority = SessionManager.shared.activeSession?.taskProfile.distractionPriority ?? .normal
 
+            var base: Double
             if scoreLow && alreadyWarned {
-                return 0.5
+                base = 0.5
+            } else if scoreLow || alreadyWarned {
+                base = 0.75
+            } else {
+                base = 1.0
             }
-            if scoreLow || alreadyWarned {
-                return 0.75
-            }
-            return 1.0
+
+            let priorityAdjustment: Double = {
+                switch distractionPriority {
+                case .low:    return 1.25
+                case .normal: return 1.0
+                case .high:   return 0.75
+                }
+            }()
+
+            return base * priorityAdjustment
         }()
 
         switch ws {

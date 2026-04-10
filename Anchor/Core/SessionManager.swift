@@ -28,10 +28,13 @@ final class SessionManager {
     func start(
         taskTitle:          String,
         appClassifications: [String: ContextFitLevel] = [:],
+        taskProfile:        TaskProfile?               = nil,
         pomodoroConfig:     PomodoroConfig?            = nil
     ) {
+        let profile = taskProfile ?? TaskProfile()
         let session = FocusSession(
             taskTitle:          taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            taskProfile:        profile,
             appClassifications: appClassifications
         )
         activeSession = session
@@ -65,6 +68,20 @@ final class SessionManager {
 
     func classifyDomain(_ domain: String, as level: ContextFitLevel) {
         activeSession?.classifyDomain(domain, as: level)
+    }
+
+    func classifyTaskProfile() {
+        guard let session = activeSession, TaskClassifier.isConfigured else { return }
+
+        Task {
+            do {
+                let profile = try await TaskClassifier.shared.classifyTaskProfile(task: session.taskTitle)
+                activeSession?.taskProfile = profile
+                print("[SessionManager] classified task profile: switching=\(String(format: "%.1fx", profile.switchingMultiplier)) priority=\(profile.distractionPriority.rawValue)")
+            } catch {
+                print("[SessionManager] task profile classification failed: \(error)")
+            }
+        }
     }
 
     func pause(reason: String = "manual") {

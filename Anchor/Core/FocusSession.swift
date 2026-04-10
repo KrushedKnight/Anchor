@@ -14,10 +14,22 @@ enum ContextFitLevel: String {
     }
 }
 
+enum DistractionPriority: String {
+    case low    = "low"       // Lenient; task allows flexibility
+    case normal = "normal"    // Standard thresholds
+    case high   = "high"      // Aggressive; minimize any drift
+}
+
+struct TaskProfile {
+    var switchingMultiplier: Double = 1.0          // 0.5–1.5; adjusts expected switching rate
+    var distractionPriority: DistractionPriority = .normal
+}
+
 struct FocusSession {
     var id:             UUID         = UUID()
     var startedAt:      Date         = .now
     var taskTitle:      String
+    var taskProfile:    TaskProfile  = .init()
 
     var appClassifications:    [String: ContextFitLevel] = [:]
     var domainClassifications: [String: ContextFitLevel] = [:]
