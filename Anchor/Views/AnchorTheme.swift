@@ -11,6 +11,13 @@ extension Color {
     static let anchorText       = Color(red: 0.176, green: 0.145, blue: 0.125)
     static let anchorTextMuted  = Color(red: 0.478, green: 0.431, blue: 0.396)
     static let anchorBreakBlue  = Color(red: 0.380, green: 0.545, blue: 0.690)
+
+    // Widget-specific colors
+    static let widgetBorder      = Color(red: 0.894, green: 0.851, blue: 0.784)
+    static let widgetSeparator   = Color(red: 0.761, green: 0.659, blue: 0.510)
+    static let widgetAppName     = Color(red: 0.549, green: 0.451, blue: 0.333)
+    static let widgetTaskText    = Color(red: 0.110, green: 0.086, blue: 0.071)
+    static let widgetBreakAccent = Color(red: 0.380, green: 0.545, blue: 0.690)
 }
 
 struct SectionHeader: View {

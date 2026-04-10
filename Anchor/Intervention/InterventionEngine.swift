@@ -54,13 +54,13 @@ final class InterventionEngine {
         }
 
         let cooldown: TimeInterval = currentLevel == .soft ? config.softCooldown : config.strongCooldown
-        if let last = lastFiredAt, Date().timeIntervalSince(last) < cooldown {
-            print("[InterventionEngine] cooldown active, \(Int(Date().timeIntervalSince(last)))s elapsed of \(Int(cooldown))s")
+        if let last = lastFiredAt, Date.now.timeIntervalSince(last) < cooldown {
+            print("[InterventionEngine] cooldown active, \(Int(Date.now.timeIntervalSince(last)))s elapsed of \(Int(cooldown))s")
             return
         }
 
         if let cycleStart = driftCycleStart,
-           Date().timeIntervalSince(cycleStart) >= config.escalationDelay {
+           Date.now.timeIntervalSince(cycleStart) >= config.escalationDelay {
             currentLevel = .strong
         }
 

@@ -15,8 +15,8 @@ enum WorkState: String {
         case .productiveSwitching: Color.anchorSage.opacity(0.75)
         case .stuckCycling:        Color.anchorAmber
         case .noveltySeeking:      Color.anchorAmber
-        case .passiveDrift:        Color(red: 0.78, green: 0.29, blue: 0.25)
-        case .idle:                Color.secondary
+        case .passiveDrift:        .anchorRed
+        case .idle:                Color.anchorTextMuted
         }
     }
 

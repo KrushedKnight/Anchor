@@ -228,7 +228,14 @@ final class DriftEngine {
     }
 
     private func decayAccumulator() {
-        guard !state.isIdle && state.contextFit > 0.7 && offTaskAccumulator > 0 else { return }
+        guard offTaskAccumulator > 0 else { return }
+
+        if state.isIdle {
+            offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * 0.5 * config.evaluationInterval)
+            return
+        }
+
+        guard state.contextFit > 0.7 else { return }
         offTaskAccumulator = max(0, offTaskAccumulator - config.recoveryDecayRate * state.contextFit * config.evaluationInterval)
     }
 
@@ -264,7 +271,7 @@ final class DriftEngine {
         if snap.isIdle { return .idle }
 
         let highDwell    = snap.dwellInCurrentContext > config.highDwellThreshold
-        let lowSwitching = snap.switchesPerMinute < 3
+        let lowSwitching = snap.switchesPerMinute < 6
         let onTask       = contextFit > 0.7
         let offTask      = contextFit < 0.3
 
@@ -382,7 +389,7 @@ final class DriftEngine {
         switch ws {
         case .deepFocus:
             let dwellFactor  = min(snap.dwellInCurrentContext / 300.0, 1.0)
-            let switchFactor = max(0, 1.0 - snap.switchesPerMinute / 6.0)
+            let switchFactor = max(0, 1.0 - snap.switchesPerMinute / 12.0)
             return dwellFactor * 0.5 + switchFactor * 0.5
 
         case .productiveSwitching:
@@ -391,7 +398,7 @@ final class DriftEngine {
             return fitFactor * 0.6 + streakFactor * 0.4
 
         case .stuckCycling:
-            return max(0, 1.0 - snap.switchesPerMinute / 10.0)
+            return max(0, 1.0 - snap.switchesPerMinute / 20.0)
 
         case .noveltySeeking:
             let scatterFactor = max(0, 1.0 - Double(snap.distinctApps5m) / 8.0)

@@ -36,7 +36,7 @@ struct RuleConfig {
         passiveDriftAtRisk:         45,
         passiveDriftDrift:          120,
         idleAtRisk:                 30,
-        idleDrift:                  120,
+        idleDrift:                  180,
         highDwellThreshold:         25,
         scoreDecayWindow:           300,
         republishInterval:          30,

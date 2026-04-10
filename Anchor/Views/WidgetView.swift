@@ -42,7 +42,8 @@ struct WidgetView: View {
         switch engine.state.workState {
         case .deepFocus, .productiveSwitching: return .lockedIn
         case .stuckCycling, .noveltySeeking:   return .drifting
-        case .passiveDrift, .idle:             return .offTask
+        case .passiveDrift:                    return .offTask
+        case .idle:                            return .away
         }
     }
 
@@ -279,22 +280,24 @@ struct WidgetView: View {
 // MARK: - Focus Tier
 
 private enum FocusTier: Equatable {
-    case lockedIn, drifting, offTask, onBreak
+    case lockedIn, drifting, offTask, away, onBreak
 
     var label: String {
         switch self {
         case .lockedIn: "Locked in"
         case .drifting: "Drifting"
         case .offTask:  "Off task"
+        case .away:     "Away"
         case .onBreak:  "On break"
         }
     }
 
     var dotColor: Color {
         switch self {
-        case .lockedIn: Color(red: 0.353, green: 0.541, blue: 0.353)
-        case .drifting: Color(red: 0.910, green: 0.627, blue: 0.188)
+        case .lockedIn: Color.anchorSage
+        case .drifting: Color.anchorAmber
         case .offTask:  Color(red: 0.753, green: 0.353, blue: 0.208)
+        case .away:     Color.anchorTextMuted
         case .onBreak:  Color.widgetBreakAccent
         }
     }
@@ -304,19 +307,10 @@ private enum FocusTier: Equatable {
         case .lockedIn: Color(red: 0.227, green: 0.420, blue: 0.227)
         case .drifting: Color(red: 0.722, green: 0.471, blue: 0.125)
         case .offTask:  Color(red: 0.600, green: 0.235, blue: 0.114)
+        case .away:     Color.anchorTextMuted
         case .onBreak:  Color(red: 0.306, green: 0.439, blue: 0.573)
         }
     }
-}
-
-// MARK: - Widget Colors
-
-private extension Color {
-    static let widgetBorder      = Color(red: 0.894, green: 0.851, blue: 0.784)
-    static let widgetSeparator   = Color(red: 0.761, green: 0.659, blue: 0.510)
-    static let widgetAppName     = Color(red: 0.549, green: 0.451, blue: 0.333)
-    static let widgetTaskText    = Color(red: 0.110, green: 0.086, blue: 0.071)
-    static let widgetBreakAccent = Color(red: 0.380, green: 0.545, blue: 0.690)
 }
 
 // MARK: - Button Styles

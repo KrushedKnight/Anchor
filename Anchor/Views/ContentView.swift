@@ -126,7 +126,7 @@ private struct TabRootView: View {
 
             switch selectedTab {
             case .home:
-                HomeTab()
+                HomeTab(switchToTab: $selectedTab)
                     .transition(.opacity)
             case .analytics:
                 CompactAnalyticsTab()
@@ -147,6 +147,7 @@ private enum SessionMode: String, CaseIterable {
 }
 
 private struct HomeTab: View {
+    @Binding var switchToTab: AppTab
     @State private var taskTitle         = ""
     @State private var classifications:  [String: ContextFitLevel] = [:]
     @State private var runningApps:      [String]                  = []
@@ -174,7 +175,7 @@ private struct HomeTab: View {
                     .textFieldStyle(.plain)
                     .font(.system(.body))
                     .padding(10)
-                    .background(Color.white)
+                    .background(Color.anchorLinen)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.anchorBorder, lineWidth: 1.5))
                     .cornerRadius(10)
                     .onSubmit { startSession() }
@@ -243,9 +244,12 @@ private struct HomeTab: View {
                 .font(.system(size: 10))
                 .foregroundStyle(Color.anchorTextMuted)
             Spacer()
-            Text("Settings →")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(Color.anchorTerracotta.opacity(0.5))
+            Button("Settings →") {
+                withAnimation(.easeInOut(duration: 0.18)) { switchToTab = .settings }
+            }
+            .font(.system(size: 9, weight: .medium))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.anchorTerracotta.opacity(0.5))
         }
         .padding(8)
         .background(Color.anchorSand.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
@@ -271,7 +275,9 @@ private struct HomeTab: View {
                 }
 
                 if SessionSummaryStore.shared.load().count > 3 {
-                    Button("See all →") {}
+                    Button("See all →") {
+                            withAnimation(.easeInOut(duration: 0.18)) { switchToTab = .analytics }
+                        }
                         .font(.system(size: 10, weight: .medium))
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.anchorTerracotta)
@@ -680,12 +686,6 @@ private struct CompactAnalyticsTab: View {
         return date >= weekAgo
     }
 
-    private func scoreColor(for score: Double) -> Color {
-        if score >= 0.7 { return .anchorSage }
-        if score >= 0.4 { return .anchorAmber }
-        return .anchorRed
-    }
-
     private func barColor(for score: Double) -> Color {
         scoreColor(for: score)
     }
@@ -775,7 +775,7 @@ private struct SettingsTab: View {
         HStack(spacing: 8) {
             Image(systemName: "bell.slash.fill")
                 .font(.system(size: 11))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Color.anchorAmber)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Notifications blocked")
                     .font(.system(size: 11, weight: .semibold))
@@ -793,8 +793,8 @@ private struct SettingsTab: View {
             .foregroundStyle(Color.anchorTerracotta)
         }
         .padding(10)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.2), lineWidth: 1))
+        .background(Color.anchorAmber.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorAmber.opacity(0.2), lineWidth: 1))
     }
 
     private var pomodoroSection: some View {
@@ -886,7 +886,7 @@ private struct SettingsTab: View {
             Button("Open Debug Panel") { showDebug = true }
                 .font(.system(size: 11))
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.anchorTerracotta)
         }
     }
 }
@@ -1137,7 +1137,7 @@ private struct DebugSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.anchorTerracotta)
             }
             .padding(16)
 
@@ -1161,19 +1161,19 @@ private struct DebugPanelContent: View {
             HStack(spacing: 4) {
                 Text("State")
                     .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                 Text(state.workState.rawValue)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(state.workState.stateColor)
                 Text(formatSec(state.workStateDuration))
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
             }
 
             HStack(spacing: 4) {
                 Text("Risk")
                     .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                 Text(state.riskLevel.label)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(state.riskLevel.color)
@@ -1182,13 +1182,13 @@ private struct DebugPanelContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("SCORE")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                     .padding(.top, 2)
                 HStack(spacing: 6) {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.primary.opacity(0.08))
+                                .fill(Color.anchorSand)
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(state.riskLevel.color)
                                 .frame(width: geo.size.width * state.focusScore)
@@ -1209,7 +1209,7 @@ private struct DebugPanelContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("METRICS")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.anchorTextMuted)
                     .padding(.top, 2)
                 DebugMetric(label: "app",            value: snap.currentApp.isEmpty ? "—" : snap.currentApp)
                 DebugMetric(label: "domain",         value: snap.currentDomain.isEmpty ? "—" : snap.currentDomain)
@@ -1230,7 +1230,7 @@ private struct DebugPanelContent: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("RECENT DWELLS")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.anchorTextMuted)
                         .padding(.top, 2)
                     ForEach(Array(snap.recentAppDwells.reversed().enumerated()), id: \.offset) { _, entry in
                         DebugMetric(label: formatSec(entry.duration), value: entry.app)
@@ -1343,8 +1343,8 @@ private struct ProviderPickerStyle: ButtonStyle {
             .font(.system(size: 9, weight: .medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isSelected ? Color.anchorTerracotta : Color.primary.opacity(0.07))
-            .foregroundStyle(isSelected ? Color.white : Color.anchorText)
+            .background(isSelected ? Color.anchorTerracotta : Color.anchorSand)
+            .foregroundStyle(isSelected ? Color.anchorLinen : Color.anchorText)
             .cornerRadius(4)
     }
 }
@@ -1365,7 +1365,7 @@ private struct APIKeyField: View {
                 Button("clear") { store.clear(for: provider) }
                     .font(.system(size: 9))
                     .buttonStyle(.plain)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.anchorRed)
             }
         } else {
             VStack(alignment: .leading, spacing: 4) {
@@ -1374,8 +1374,8 @@ private struct APIKeyField: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 10))
                         .padding(5)
-                        .background(Color.white)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(saveError != nil ? Color.red.opacity(0.6) : Color.anchorBorder, lineWidth: 1.5))
+                        .background(Color.anchorLinen)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(saveError != nil ? Color.anchorRed.opacity(0.6) : Color.anchorBorder, lineWidth: 1.5))
                         .cornerRadius(8)
                         .onSubmit { save() }
                         .onChange(of: keyInput) { _, _ in saveError = nil }
@@ -1388,7 +1388,7 @@ private struct APIKeyField: View {
                 if let error = saveError {
                     Text(error)
                         .font(.system(size: 9))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.anchorRed)
                 }
             }
         }
@@ -1426,7 +1426,7 @@ private struct OllamaConfigFields: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 10))
                     .padding(5)
-                    .background(Color.white)
+                    .background(Color.anchorLinen)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
                     .cornerRadius(8)
                     .onSubmit { save() }
@@ -1441,7 +1441,7 @@ private struct OllamaConfigFields: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 10))
                     .padding(5)
-                    .background(Color.white)
+                    .background(Color.anchorLinen)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
                     .cornerRadius(8)
                     .onSubmit { save() }
@@ -1473,11 +1473,11 @@ private struct DebugMetric: View {
         HStack(alignment: .top) {
             Text(label)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.anchorTextMuted)
                 .frame(width: 110, alignment: .leading)
             Text(value)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.anchorText)
         }
     }
 }

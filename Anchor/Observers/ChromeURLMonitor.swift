@@ -135,7 +135,7 @@ final class ChromeURLMonitor {
     }
 
     private func extractDomain(from url: String) -> String {
-        guard let host = URL(string: url)?.host else { return url }
+        guard let host = URL(string: url)?.host, !host.isEmpty else { return "" }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 }

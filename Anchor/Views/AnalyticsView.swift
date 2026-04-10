@@ -608,7 +608,7 @@ private struct NudgeRing: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .stroke(.quaternary, lineWidth: 6)
+                    .stroke(Color.anchorTextMuted.opacity(0.25), lineWidth: 6)
                 Circle()
                     .trim(from: 0, to: rate)
                     .stroke(ringColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))

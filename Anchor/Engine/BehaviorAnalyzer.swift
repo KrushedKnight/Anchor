@@ -29,8 +29,8 @@ final class BehaviorAnalyzer {
 
     func update() {
         let newEvents = store.slice(after: lastSeenId)
-        if let last = newEvents.last { lastSeenId = last.id }
         processEvents(newEvents)
+        if let last = newEvents.last { lastSeenId = last.id }
         buildSnapshot()
     }
 
@@ -123,7 +123,7 @@ final class BehaviorAnalyzer {
             isIdle:                isIdle,
             appSwitchRate30s:      Double(appIn30.count),
             tabSwitchRate30s:      Double(tabIn30.count),
-            switchesPerMinute:     Double(appIn30.count + tabIn30.count),
+            switchesPerMinute:     Double(appIn30.count + tabIn30.count) * 2,
             distinctApps5m:        Set(appSwitchTimestamps.map { $0.app }).count,
             isBouncing:            isBouncing,
             recentAppDwells:       recentAppDwells,

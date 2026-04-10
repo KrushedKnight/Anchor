@@ -111,7 +111,7 @@ private struct NotificationsStep: View {
                     systemImage: granted ? "checkmark.circle.fill" : "xmark.circle"
                 )
                 .font(.system(size: 11))
-                .foregroundStyle(granted ? Color.anchorSage : .red)
+                .foregroundStyle(granted ? Color.anchorSage : Color.anchorRed)
             } else {
                 Button("Enable Notifications") {
                     requesting = true
@@ -217,8 +217,8 @@ private struct AIProviderStep: View {
                         .font(.system(size: 9, weight: .medium))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(store.activeProvider == provider ? Color.anchorTerracotta : Color.primary.opacity(0.07))
-                        .foregroundStyle(store.activeProvider == provider ? Color.white : Color.anchorText)
+                        .background(store.activeProvider == provider ? Color.anchorTerracotta : Color.anchorSand)
+                        .foregroundStyle(store.activeProvider == provider ? Color.anchorLinen : Color.anchorText)
                         .cornerRadius(4)
                         .buttonStyle(.plain)
                     }
@@ -256,7 +256,7 @@ private struct AIProviderStep: View {
                     }
                     .font(.system(size: 9))
                     .buttonStyle(.plain)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.anchorRed)
                 }
             } else {
                 HStack(spacing: 6) {
@@ -264,7 +264,7 @@ private struct AIProviderStep: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 10))
                         .padding(5)
-                        .background(Color.white)
+                        .background(Color.anchorLinen)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.anchorBorder, lineWidth: 1.5))
                         .cornerRadius(8)
                         .onSubmit { saveKey() }
@@ -277,7 +277,7 @@ private struct AIProviderStep: View {
                 if let err = validationError {
                     Text(err)
                         .font(.system(size: 9))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.anchorRed)
                 }
             }
         }
