@@ -1,0 +1,6 @@
+<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tomato body -->
+  <path d="M12 2C9.24 2 7 4.24 7 7C7 10.5 9 14 12 20C15 14 17 10.5 17 7C17 4.24 14.76 2 12 2Z" fill="#9CA3AF"/>
+  <!-- Stem -->
+  <circle cx="12" cy="6" r="1.5" fill="#9CA3AF"/>
+</svg>

@@ -11,6 +11,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Spacer(minLength: 20)
             if let summary = sessionManager.lastSummary {
                 SessionSummaryView(summary: summary)
             } else if sessionManager.isActive {
@@ -157,7 +158,6 @@ private struct HomeTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 30)
             launcherColumn
             Spacer(minLength: 0)
         }
@@ -226,8 +226,10 @@ private struct HomeTab: View {
                 .buttonStyle(.plain)
 
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { sessionMode = .pomodoro } }) {
-                    Image(systemName: "clock.badge.checkmark")
-                        .font(.system(size: 11, weight: .medium))
+                    Image("tomato-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 11, height: 11)
                         .frame(maxWidth: .infinity)
                         .frame(height: 28)
                         .contentShape(Rectangle())
@@ -246,8 +248,10 @@ private struct HomeTab: View {
         let cyc   = PomodoroSettings.cyclesBeforeLong
 
         return HStack(spacing: 6) {
-            Image(systemName: "clock.badge.checkmark")
-                .font(.system(size: 10))
+            Image("tomato-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 10, height: 10)
                 .foregroundStyle(Color.anchorTerracotta.opacity(0.6))
             Text("\(work)m work · \(brk)m break · \(long)m long every \(cyc)")
                 .font(.system(size: 10))
@@ -1466,7 +1470,7 @@ struct AnchorPrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(.body, weight: .medium))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 11)
             .background(Color.anchorTerracotta.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.35))
             .foregroundStyle(.white)
             .cornerRadius(10)
