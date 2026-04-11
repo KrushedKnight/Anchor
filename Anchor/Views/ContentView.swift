@@ -204,7 +204,7 @@ private struct HomeTab: View {
     }
 
     private var modePill: some View {
-        ZStack {
+        ZStack(alignment: .center) {
             // Background pill
             Capsule()
                 .fill(Color.anchorTextMuted.opacity(0.1))
@@ -213,8 +213,7 @@ private struct HomeTab: View {
             Circle()
                 .fill(Color.anchorTextMuted.opacity(0.2))
                 .frame(width: 26, height: 26)
-                .offset(x: sessionMode == .freeform ? -8 : 8)
-                .padding(.horizontal, 2)
+                .offset(x: sessionMode == .freeform ? -15.5 : 15.5)
 
             // Icon buttons
             HStack(spacing: 0) {
