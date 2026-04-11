@@ -1,10 +1,10 @@
 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- Tomato body - round bulbous shape -->
-  <circle cx="12" cy="14" r="10" fill="#9CA3AF"/>
+  <circle cx="12" cy="14" r="10" fill="currentColor"/>
 
   <!-- Stem -->
-  <rect x="11" y="2" width="2" height="5" fill="#9CA3AF"/>
+  <rect x="11" y="2" width="2" height="5" fill="currentColor"/>
 
   <!-- Sepals/leaves at top -->
-  <path d="M8 6L6 4M12 4L12 2M16 6L18 4" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <path d="M8 6L6 4M12 4L12 2M16 6L18 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 </svg>
