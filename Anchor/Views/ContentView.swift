@@ -157,7 +157,7 @@ private struct HomeTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 60)
+            Spacer(minLength: 30)
             launcherColumn
             Spacer(minLength: 0)
         }
