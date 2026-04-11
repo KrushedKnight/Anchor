@@ -156,13 +156,13 @@ private struct HomeTab: View {
     @State private var sessionMode:      SessionMode = .freeform
 
     var body: some View {
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .center, spacing: 24) {
             launcherColumn
             Spacer(minLength: 0)
             recentColumn
         }
+        .frame(maxHeight: .infinity, alignment: .center)
         .padding(24)
-        .padding(.top, 40)
         .onAppear { refreshApps() }
     }
 
@@ -197,8 +197,6 @@ private struct HomeTab: View {
 
             Button("Drop Anchor") { startSession() }
                 .buttonStyle(AnchorPrimaryButtonStyle())
-
-            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -296,8 +294,6 @@ private struct HomeTab: View {
                         .foregroundStyle(Color.anchorTerracotta)
                 }
             }
-
-            Spacer(minLength: 0)
         }
         .frame(width: 170)
     }
