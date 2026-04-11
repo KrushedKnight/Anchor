@@ -109,18 +109,8 @@ struct SessionSummaryView: View {
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 12) {
-            Button("Start Fresh") { saveAndDismiss() }
-                .buttonStyle(AnchorPrimaryButtonStyle())
-            Button("Done") { saveAndDismiss() }
-                .font(.system(.body, weight: .medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(Color.anchorSand)
-                .foregroundStyle(Color.anchorTextMuted)
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.anchorBorder, lineWidth: 1))
-        }
+        Button("Start Fresh") { saveAndDismiss() }
+            .buttonStyle(AnchorPrimaryButtonStyle())
     }
 
     private var detailsContent: some View {
