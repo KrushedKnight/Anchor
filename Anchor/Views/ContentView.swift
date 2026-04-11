@@ -156,10 +156,10 @@ private struct HomeTab: View {
     @State private var sessionMode:      SessionMode = .freeform
 
     var body: some View {
-        HStack(alignment: .center, spacing: 24) {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
             launcherColumn
             Spacer(minLength: 0)
-            recentColumn
         }
         .padding(24)
         .onAppear { refreshApps() }
@@ -196,8 +196,6 @@ private struct HomeTab: View {
 
             Button("Drop Anchor") { startSession() }
                 .buttonStyle(AnchorPrimaryButtonStyle())
-
-            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -265,39 +263,6 @@ private struct HomeTab: View {
         .background(Color.anchorSand.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var recentColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            let sessions = Array(SessionSummaryStore.shared.load().prefix(3))
-            Text("Recent")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color.anchorTextMuted)
-
-            if sessions.isEmpty {
-                Text("No sessions yet")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.anchorTextMuted.opacity(0.6))
-                    .frame(maxHeight: .infinity, alignment: .top)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(sessions) { session in
-                        RecentSessionRow(session: session)
-                    }
-                }
-
-                if SessionSummaryStore.shared.load().count > 3 {
-                    Button("See all →") {
-                            withAnimation(.easeInOut(duration: 0.18)) { switchToTab = .analytics }
-                        }
-                        .font(.system(size: 10, weight: .medium))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.anchorTerracotta)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .frame(width: 170)
-    }
 
     private func refreshApps() {
         runningApps = NSWorkspace.shared.runningApplications
