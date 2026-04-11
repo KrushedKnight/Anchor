@@ -162,7 +162,6 @@ private struct HomeTab: View {
             recentColumn
         }
         .padding(24)
-        .padding(.top, 80)
         .onAppear { refreshApps() }
     }
 
