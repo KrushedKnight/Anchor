@@ -161,8 +161,8 @@ private struct HomeTab: View {
             Spacer(minLength: 0)
             recentColumn
         }
-        .frame(maxHeight: .infinity, alignment: .center)
         .padding(24)
+        .padding(.top, 80)
         .onAppear { refreshApps() }
     }
 
@@ -197,48 +197,49 @@ private struct HomeTab: View {
 
             Button("Drop Anchor") { startSession() }
                 .buttonStyle(AnchorPrimaryButtonStyle())
+
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var modePill: some View {
-        HStack(spacing: 0) {
-            ZStack {
-                if sessionMode == .freeform {
-                    Circle()
-                        .fill(Color.anchorTextMuted.opacity(0.12))
-                        .frame(width: 26, height: 26)
-                }
+        ZStack {
+            // Background pill
+            Capsule()
+                .fill(Color.anchorTextMuted.opacity(0.1))
 
+            // Sliding circle indicator
+            Circle()
+                .fill(Color.anchorTextMuted.opacity(0.2))
+                .frame(width: 26, height: 26)
+                .offset(x: sessionMode == .freeform ? -8 : 8)
+                .padding(.horizontal, 2)
+
+            // Icon buttons
+            HStack(spacing: 0) {
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { sessionMode = .freeform } }) {
                     Image(systemName: "timer")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 28, height: 28)
+                        .font(.system(size: 11, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 28)
                         .contentShape(Rectangle())
-                        .foregroundStyle(sessionMode == .freeform ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.5))
+                        .foregroundStyle(sessionMode == .freeform ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.4))
                 }
                 .buttonStyle(.plain)
-            }
-
-            ZStack {
-                if sessionMode == .pomodoro {
-                    Circle()
-                        .fill(Color.anchorTextMuted.opacity(0.12))
-                        .frame(width: 26, height: 26)
-                }
 
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { sessionMode = .pomodoro } }) {
                     Image(systemName: "clock.badge.checkmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 28, height: 28)
+                        .font(.system(size: 11, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 28)
                         .contentShape(Rectangle())
-                        .foregroundStyle(sessionMode == .pomodoro ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.5))
+                        .foregroundStyle(sessionMode == .pomodoro ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.4))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(3)
-        .background(Color.anchorTextMuted.opacity(0.06), in: Capsule())
+        .frame(width: 62, height: 32)
     }
 
     private var pomodoroHint: some View {
@@ -294,6 +295,8 @@ private struct HomeTab: View {
                         .foregroundStyle(Color.anchorTerracotta)
                 }
             }
+
+            Spacer(minLength: 0)
         }
         .frame(width: 170)
     }
