@@ -157,7 +157,7 @@ private struct HomeTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 0)
+            Spacer(minLength: 60)
             launcherColumn
             Spacer(minLength: 0)
         }
@@ -166,25 +166,26 @@ private struct HomeTab: View {
     }
 
     private var launcherColumn: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .center, spacing: 20) {
             Text("What are you working on?")
-                .font(.system(.caption))
-                .foregroundStyle(Color.anchorTextMuted)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.anchorText)
 
             HStack(spacing: 0) {
                 TextField("e.g. Build the login flow", text: $taskTitle)
                     .textFieldStyle(.plain)
-                    .font(.system(.body))
-                    .padding(10)
-                    .padding(.trailing, 45)
+                    .font(.system(size: 16, weight: .regular))
+                    .padding(14)
+                    .padding(.trailing, 50)
                     .contentShape(Rectangle())
 
                 modePill
-                    .padding(.trailing, 8)
+                    .padding(.trailing, 10)
             }
+            .frame(height: 52)
             .background(Color.anchorLinen)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.anchorBorder, lineWidth: 1.5))
-            .cornerRadius(10)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.anchorBorder, lineWidth: 1.5))
+            .cornerRadius(12)
             .onSubmit { startSession() }
             .onChange(of: taskTitle) { _, newValue in
                 scheduleClassification(for: newValue)
@@ -197,7 +198,7 @@ private struct HomeTab: View {
             Button("Drop Anchor") { startSession() }
                 .buttonStyle(AnchorPrimaryButtonStyle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var modePill: some View {
