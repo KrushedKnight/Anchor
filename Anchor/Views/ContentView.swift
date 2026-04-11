@@ -204,33 +204,43 @@ private struct HomeTab: View {
     }
 
     private var modePill: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.anchorTextMuted.opacity(0.08))
-                .frame(width: 32, height: 28)
-                .opacity(sessionMode == .freeform ? 1 : 0)
-                .offset(x: sessionMode == .freeform ? 0 : 16)
+        HStack(spacing: 0) {
+            ZStack {
+                if sessionMode == .freeform {
+                    Circle()
+                        .fill(Color.anchorTextMuted.opacity(0.12))
+                        .frame(width: 26, height: 26)
+                }
 
-            HStack(spacing: 0) {
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { sessionMode = .freeform } }) {
                     Image(systemName: "timer")
-                        .font(.system(size: 11, weight: .medium))
-                        .frame(width: 32, height: 28)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                         .foregroundStyle(sessionMode == .freeform ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.5))
                 }
                 .buttonStyle(.plain)
+            }
+
+            ZStack {
+                if sessionMode == .pomodoro {
+                    Circle()
+                        .fill(Color.anchorTextMuted.opacity(0.12))
+                        .frame(width: 26, height: 26)
+                }
 
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { sessionMode = .pomodoro } }) {
                     Image(systemName: "clock.badge.checkmark")
-                        .font(.system(size: 11, weight: .medium))
-                        .frame(width: 32, height: 28)
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                         .foregroundStyle(sessionMode == .pomodoro ? Color.anchorTerracotta : Color.anchorTextMuted.opacity(0.5))
                 }
                 .buttonStyle(.plain)
             }
         }
+        .padding(3)
+        .background(Color.anchorTextMuted.opacity(0.06), in: Capsule())
     }
 
     private var pomodoroHint: some View {
