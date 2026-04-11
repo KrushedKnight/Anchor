@@ -158,9 +158,11 @@ private struct HomeTab: View {
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
             launcherColumn
+            Spacer(minLength: 0)
             recentColumn
         }
         .padding(24)
+        .padding(.top, 40)
         .onAppear { refreshApps() }
     }
 
@@ -170,7 +172,7 @@ private struct HomeTab: View {
                 .font(.system(.caption))
                 .foregroundStyle(Color.anchorTextMuted)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 TextField("e.g. Build the login flow", text: $taskTitle)
                     .textFieldStyle(.plain)
                     .font(.system(.body))
@@ -185,6 +187,7 @@ private struct HomeTab: View {
 
                 modePill
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if sessionMode == .pomodoro {
                 pomodoroHint
@@ -195,28 +198,29 @@ private struct HomeTab: View {
 
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var modePill: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(SessionMode.allCases, id: \.self) { mode in
                 Button(action: { withAnimation(.easeInOut(duration: 0.15)) { sessionMode = mode } }) {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Image(systemName: mode == .freeform ? "timer" : "clock.badge.checkmark")
-                            .font(.system(size: 8))
+                            .font(.system(size: 9))
                         Text(mode.rawValue)
-                            .font(.system(size: 10, weight: sessionMode == mode ? .medium : .regular))
+                            .font(.system(size: 11, weight: .medium))
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
                     .background(
                         Group {
                             if sessionMode == mode {
-                                RoundedRectangle(cornerRadius: 5)
+                                RoundedRectangle(cornerRadius: 6)
                                     .fill(Color.anchorLinen)
-                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.anchorBorder, lineWidth: 1))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.anchorBorder, lineWidth: 1))
                             }
                         }
                     )
@@ -226,8 +230,7 @@ private struct HomeTab: View {
             }
         }
         .padding(2)
-        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 7))
-        .fixedSize()
+        .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var pomodoroHint: some View {
@@ -286,7 +289,7 @@ private struct HomeTab: View {
 
             Spacer(minLength: 0)
         }
-        .frame(width: 200)
+        .frame(width: 170)
     }
 
     private func refreshApps() {
