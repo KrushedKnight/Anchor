@@ -113,7 +113,7 @@ private struct AnchorTabBar: View {
         .padding(4)
         .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 9))
         .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.top, 8)
         .padding(.bottom, 6)
     }
 }
@@ -125,17 +125,17 @@ private struct TabRootView: View {
         VStack(spacing: 0) {
             AnchorTabBar(selected: $selectedTab)
 
-            switch selectedTab {
-            case .home:
-                HomeTab(switchToTab: $selectedTab)
-                    .transition(.opacity)
-            case .analytics:
-                CompactAnalyticsTab()
-                    .transition(.opacity)
-            case .settings:
-                SettingsTab()
-                    .transition(.opacity)
+            ZStack {
+                switch selectedTab {
+                case .home:
+                    HomeTab(switchToTab: $selectedTab)
+                case .analytics:
+                    CompactAnalyticsTab()
+                case .settings:
+                    SettingsTab()
+                }
             }
+            .transition(.opacity)
         }
     }
 }
@@ -227,6 +227,7 @@ private struct HomeTab: View {
 
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { sessionMode = .pomodoro } }) {
                     Image("tomato-icon")
+                        .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 13, height: 13)
@@ -249,6 +250,7 @@ private struct HomeTab: View {
 
         return HStack(spacing: 6) {
             Image("tomato-icon")
+                .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 12, height: 12)
