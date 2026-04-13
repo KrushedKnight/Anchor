@@ -3,41 +3,44 @@ import Charts
 
 struct AnalyticsView: View {
     private let profile: UserProfile
-    private let summaries: [SessionSummary]
+    @State private var summaries: [SessionSummary]
 
     init() {
-        self.profile   = UserProfileStore.shared.load()
-        self.summaries = SessionSummaryStore.shared.load()
+        self.profile    = UserProfileStore.shared.load()
+        self._summaries = State(initialValue: SessionSummaryStore.shared.load())
+    }
+
+    private func reloadSummaries() {
+        summaries = SessionSummaryStore.shared.load()
     }
 
     private static let minimumSessionsRequired = 3
 
     var body: some View {
-        Group {
-            if profile.totalSessions < Self.minimumSessionsRequired {
-                insufficientDataState
-            } else {
-                ScrollView {
-                    VStack(spacing: 24) {
-                        headerStats
-                        archetypeSection
-                        streakAndDayOfWeekRow
-                        focusTrendSection
-                        bestHoursSection
-                        sessionHistorySection
-                        driftSourcesSection
-                        workStyleSection
-                        if profile.totalSessions >= 5 {
-                            nudgeEffectivenessSection
-                        }
-                        let notedSessions = summaries.filter { !$0.note.isEmpty }
-                        if !notedSessions.isEmpty {
-                            sessionNotesSection(notedSessions)
-                        }
+        ScrollView {
+            VStack(spacing: 24) {
+                if profile.totalSessions < Self.minimumSessionsRequired {
+                    insufficientDataState
+                        .padding(.vertical, 40)
+                } else {
+                    headerStats
+                    archetypeSection
+                    streakAndDayOfWeekRow
+                    focusTrendSection
+                    bestHoursSection
+                    driftSourcesSection
+                    workStyleSection
+                    if profile.totalSessions >= 5 {
+                        nudgeEffectivenessSection
                     }
-                    .padding(24)
+                    let notedSessions = summaries.filter { !$0.note.isEmpty }
+                    if !notedSessions.isEmpty {
+                        sessionNotesSection(notedSessions)
+                    }
                 }
+                recentSessionsListSection
             }
+            .padding(24)
         }
         .frame(minWidth: 600, minHeight: 500)
     }
@@ -73,7 +76,7 @@ struct AnalyticsView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Header Stats
@@ -319,37 +322,27 @@ struct AnalyticsView: View {
             .map { $0 }
     }
 
-    // MARK: - Session History
+    // MARK: - Recent Sessions List
 
-    private var sessionHistorySection: some View {
-        AnalyticsCard(title: "Recent Sessions", subtitle: "\(profile.recentSessions.count) sessions") {
-            if profile.recentSessions.isEmpty {
+    private var recentSessionsListSection: some View {
+        AnalyticsCard(title: "Recent Sessions", subtitle: "\(summaries.count) total") {
+            if summaries.isEmpty {
                 Text("No sessions recorded yet.")
                     .foregroundStyle(Color.anchorTextMuted)
                     .frame(height: 80)
                     .frame(maxWidth: .infinity)
             } else {
-                Chart {
-                    ForEach(Array(profile.recentSessions.enumerated()), id: \.offset) { index, session in
-                        BarMark(
-                            x: .value("Session", index + 1),
-                            y: .value("Focus", session.focusScoreAvg * 100)
+                LazyVStack(spacing: 8) {
+                    ForEach(summaries) { summary in
+                        SessionRow(
+                            summary: summary,
+                            onDelete: {
+                                SessionSummaryStore.shared.delete(sessionId: summary.sessionId)
+                                reloadSummaries()
+                            }
                         )
-                        .foregroundStyle(barColor(for: session.focusScoreAvg))
-                        .cornerRadius(3)
                     }
                 }
-                .chartYScale(domain: 0...100)
-                .chartYAxis {
-                    AxisMarks(values: [0, 50, 100]) { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let v = value.as(Int.self) { Text("\(v)%") }
-                        }
-                    }
-                }
-                .chartXAxisLabel("Session")
-                .frame(height: 160)
             }
         }
     }
@@ -530,7 +523,7 @@ struct AnalyticsView: View {
     }
 
     private func barColor(for score: Double) -> Color {
-        if score >= 0.7 { return .anchorSage }
+        if score >= 0.7 { return .anchorTerracotta }
         if score >= 0.4 { return .anchorAmber }
         return .anchorRed
     }
@@ -627,9 +620,257 @@ private struct NudgeRing: View {
     }
 
     private var ringColor: Color {
-        if rate >= 0.6 { return .anchorSage }
+        if rate >= 0.6 { return .anchorTerracotta }
         if rate >= 0.3 { return .anchorAmber }
         return .anchorRed
+    }
+}
+
+// MARK: - Session Row
+
+private struct SessionRow: View {
+    let summary: SessionSummary
+    let onDelete: () -> Void
+
+    @State private var isExpanded = false
+    @State private var showDeleteConfirm = false
+    @State private var editingNote: String = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            collapsedHeader
+            if isExpanded {
+                expandedDetails
+                    .padding(.top, 12)
+                    .transition(.opacity)
+            }
+        }
+        .padding(12)
+        .background(Color.anchorLinen, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.anchorBorder.opacity(0.5), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isExpanded { editingNote = summary.note }
+            withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+        }
+        .confirmationDialog(
+            "Delete this session?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the session record. Your overall stats and analytics won't change.")
+        }
+    }
+
+    private var collapsedHeader: some View {
+        HStack(spacing: 12) {
+            scoreBadge
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.taskTitle.isEmpty ? "Untitled session" : summary.taskTitle)
+                    .font(.system(.callout, weight: .medium))
+                    .foregroundStyle(Color.anchorText)
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(relativeDate(summary.startedAt))
+                    Text("·")
+                    Text(formatDuration(summary.duration))
+                }
+                .font(.caption)
+                .foregroundStyle(Color.anchorTextMuted)
+            }
+
+            Spacer()
+
+            if !summary.note.isEmpty {
+                Image(systemName: "note.text")
+                    .font(.caption2)
+                    .foregroundStyle(Color.anchorTerracotta.opacity(0.7))
+            }
+
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.anchorTextMuted)
+        }
+    }
+
+    private var scoreBadge: some View {
+        Text("\(Int(summary.focusScoreAvg * 100))%")
+            .font(.system(.callout, weight: .semibold).monospacedDigit())
+            .foregroundStyle(Color.anchorText)
+            .frame(width: 48, height: 32)
+            .background(scoreColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(scoreColor.opacity(0.5), lineWidth: 1)
+            )
+    }
+
+    private var expandedDetails: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+                .padding(.bottom, 6)
+
+            detailRow("Best streak",  formatDuration(summary.longestFocusStreak))
+            detailRow("Off-task",     formatDuration(summary.offTaskTime))
+            detailRow("Score low/high/final", scoreSummary)
+            if summary.breakCount > 0 {
+                detailRow("Active time", formatDuration(summary.activeWorkTime))
+                detailRow("Break time",  formatDuration(summary.totalBreakTime), color: .anchorBreakBlue)
+                detailRow("Breaks",      "\(summary.breakCount)")
+            }
+            if let cycles = summary.pomodoroCompletedCycles {
+                detailRow("Pomodoro cycles", "\(cycles)")
+            }
+            detailRow("Interventions", interventionLabel)
+
+            if !summary.topDistractions.isEmpty {
+                Text("TOP DISTRACTIONS")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.anchorTerracotta.opacity(0.6))
+                    .tracking(0.8)
+                    .padding(.top, 6)
+                ForEach(summary.topDistractions.prefix(3), id: \.context) { entry in
+                    detailRow(
+                        cleanContextLabel(entry.context),
+                        formatDuration(entry.seconds),
+                        color: .anchorRed.opacity(0.8)
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("NOTE")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.anchorTerracotta.opacity(0.6))
+                    .tracking(0.8)
+                    .padding(.top, 6)
+                TextEditor(text: $editingNote)
+                    .font(.caption)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.anchorLinen)
+                    .cornerRadius(6)
+                    .frame(minHeight: 50, maxHeight: 100)
+                    .overlay(alignment: .topLeading) {
+                        if editingNote.isEmpty {
+                            Text("Add a note...")
+                                .font(.caption)
+                                .foregroundStyle(Color.anchorTextMuted.opacity(0.5))
+                                .padding(6)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.anchorBorder.opacity(0.5), lineWidth: 1)
+                    )
+                    .tint(Color.anchorTerracotta)
+                    .onTapGesture {}
+
+                if editingNote != summary.note {
+                    HStack {
+                        Spacer()
+                        Button("Save note") {
+                            var updated = summary
+                            updated.note = editingNote
+                            SessionSummaryStore.shared.save(updated)
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.anchorTerracotta)
+                    }
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.anchorRed)
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String, color: Color = .anchorText) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(Color.anchorTextMuted)
+                .frame(width: 140, alignment: .leading)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(value)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(color)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var scoreColor: Color {
+        switch summary.focusScoreAvg {
+        case 0.7...: return .anchorTerracotta
+        case 0.4...: return .anchorAmber
+        default:     return .anchorRed
+        }
+    }
+
+    private var scoreSummary: String {
+        let lo  = String(format: "%.0f%%", summary.focusScoreMin   * 100)
+        let hi  = String(format: "%.0f%%", summary.focusScoreMax   * 100)
+        let fin = String(format: "%.0f%%", summary.focusScoreFinal * 100)
+        return "\(lo) / \(hi) / \(fin)"
+    }
+
+    private var interventionLabel: String {
+        if summary.interventionCount == 0 { return "none" }
+        var label = "\(summary.interventionCount)"
+        if summary.escalationCount > 0 {
+            label += " (\(summary.escalationCount) escalated)"
+        }
+        return label
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 { return "just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86_400 { return "\(Int(interval / 3600))h ago" }
+        if interval < 172_800 { return "yesterday" }
+        if interval < 604_800 { return "\(Int(interval / 86_400))d ago" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return formatter.string(from: date)
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s)s" }
+        if s < 3600 {
+            let m = s / 60
+            let r = s % 60
+            return r == 0 ? "\(m)m" : "\(m)m \(r)s"
+        }
+        let h = s / 3600
+        let m = (s % 3600) / 60
+        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+    }
+
+    private func cleanContextLabel(_ context: String) -> String {
+        context
+            .replacingOccurrences(of: "domain:", with: "")
+            .replacingOccurrences(of: "app:", with: "")
     }
 }
 

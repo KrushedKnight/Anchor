@@ -47,6 +47,7 @@ final class DriftEngine {
     }
 
     private func tick() {
+        guard SessionManager.shared.activeSession != nil else { return }
         guard !SessionManager.shared.isPaused else { return }
 
         analyzer.update()

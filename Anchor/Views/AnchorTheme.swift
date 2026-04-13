@@ -6,6 +6,7 @@ extension Color {
     static let anchorTerracotta = Color(red: 0.878, green: 0.478, blue: 0.322)
     static let anchorSage       = Color(red: 0.353, green: 0.541, blue: 0.353)
     static let anchorAmber      = Color(red: 0.910, green: 0.627, blue: 0.188)
+    static let anchorGold       = Color(red: 0.910, green: 0.706, blue: 0.290)
     static let anchorRed        = Color(red: 0.780, green: 0.290, blue: 0.250)
     static let anchorBorder     = Color(red: 0.894, green: 0.851, blue: 0.784)
     static let anchorText       = Color(red: 0.176, green: 0.145, blue: 0.125)

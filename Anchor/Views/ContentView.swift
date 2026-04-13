@@ -11,15 +11,18 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 20)
             if let summary = sessionManager.lastSummary {
+                Spacer(minLength: 20)
                 SessionSummaryView(summary: summary)
+                Spacer(minLength: 0)
             } else if sessionManager.isActive {
                 ActiveSessionCompactView()
+                Spacer()
             } else {
+                Spacer(minLength: 20)
                 TabRootView()
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
         .frame(width: 600, height: 450)
         .background(Color.anchorLinen.ignoresSafeArea())
@@ -113,8 +116,8 @@ private struct AnchorTabBar: View {
         .padding(4)
         .background(Color.anchorSand, in: RoundedRectangle(cornerRadius: 9))
         .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
+        .padding(.top, 2)
+        .padding(.bottom, 12)
     }
 }
 
@@ -125,7 +128,7 @@ private struct TabRootView: View {
         VStack(spacing: 0) {
             AnchorTabBar(selected: $selectedTab)
 
-            ZStack {
+            ZStack(alignment: .top) {
                 switch selectedTab {
                 case .home:
                     HomeTab(switchToTab: $selectedTab)
@@ -135,8 +138,10 @@ private struct TabRootView: View {
                     SettingsTab()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .transition(.opacity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -363,26 +368,36 @@ private struct RecentSessionRow: View {
 
 private struct CompactAnalyticsTab: View {
     private let profile: UserProfile
-    private let summaries: [SessionSummary]
+    @State private var summaries: [SessionSummary]
 
     init() {
-        self.profile   = UserProfileStore.shared.load()
-        self.summaries = SessionSummaryStore.shared.load()
+        self.profile    = UserProfileStore.shared.load()
+        self._summaries = State(initialValue: SessionSummaryStore.shared.load())
     }
 
     private static let minimumSessions = 3
 
+    private func reloadSummaries() {
+        summaries = SessionSummaryStore.shared.load()
+    }
+
     var body: some View {
-        if profile.totalSessions < Self.minimumSessions {
-            insufficientDataState
-        } else {
+        ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                scoreBar
-                insightCardsGrid
-                weeklyChart
+                if profile.totalSessions < Self.minimumSessions {
+                    insufficientDataState
+                } else {
+                    scoreBar
+                    insightCardsGrid
+                    weeklyChart
+                }
+                recentSessionsListSection
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 20)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var insufficientDataState: some View {
@@ -490,7 +505,7 @@ private struct CompactAnalyticsTab: View {
                         title: "Peak Focus",
                         headline: "You focus best \(formatter.string(from: date))",
                         icon: "clock",
-                        color: .anchorSage
+                        color: .anchorAmber
                     )
                 }
             }
@@ -578,7 +593,7 @@ private struct CompactAnalyticsTab: View {
     }
 
     private func trendPill(pct: Int, isUp: Bool) -> some View {
-        let color = isUp ? Color.anchorSage : .anchorRed
+        let color = isUp ? Color.anchorGold : .anchorRed
         return HStack(spacing: 3) {
             Image(systemName: isUp ? "arrow.up.right" : "arrow.down.right")
                 .font(.system(size: 9, weight: .bold))
@@ -679,6 +694,39 @@ private struct CompactAnalyticsTab: View {
             .replacingOccurrences(of: "app:", with: "")
     }
 
+    private var recentSessionsListSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Recent Sessions")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.anchorText)
+                Spacer()
+                Text("\(summaries.count) total")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.anchorTextMuted)
+            }
+
+            if summaries.isEmpty {
+                Text("No sessions recorded yet.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.anchorTextMuted)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+            } else {
+                LazyVStack(spacing: 6) {
+                    ForEach(summaries) { summary in
+                        SessionRow(
+                            summary: summary,
+                            onDelete: {
+                                SessionSummaryStore.shared.delete(sessionId: summary.sessionId)
+                                reloadSummaries()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private func formatDuration(_ seconds: Double) -> String {
         let total = Int(seconds)
         let h = total / 3600
@@ -686,6 +734,245 @@ private struct CompactAnalyticsTab: View {
         if h > 0 { return "\(h)h \(m)m" }
         if m > 0 { return "\(m)m" }
         return "<1m"
+    }
+}
+
+// MARK: - Session Row
+
+private struct SessionRow: View {
+    let summary: SessionSummary
+    let onDelete: () -> Void
+
+    @State private var isExpanded = false
+    @State private var showDeleteConfirm = false
+    @State private var editingNote: String = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            collapsedHeader
+            if isExpanded {
+                expandedDetails
+                    .padding(.top, 10)
+                    .transition(.opacity)
+            }
+        }
+        .padding(10)
+        .background(Color.anchorSand.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.anchorBorder.opacity(0.5), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isExpanded { editingNote = summary.note }
+            withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+        }
+        .confirmationDialog(
+            "Delete this session?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the session record. Your overall stats and analytics won't change.")
+        }
+    }
+
+    private var collapsedHeader: some View {
+        HStack(spacing: 10) {
+            scoreBadge
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.taskTitle.isEmpty ? "Untitled session" : summary.taskTitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.anchorText)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(relativeDate(summary.startedAt))
+                    Text("·")
+                    Text(formatDuration(summary.duration))
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
+            }
+
+            Spacer()
+
+            if !summary.note.isEmpty {
+                Image(systemName: "note.text")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.anchorTerracotta.opacity(0.7))
+            }
+
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.anchorTextMuted)
+        }
+    }
+
+    private var scoreBadge: some View {
+        Text("\(Int(summary.focusScoreAvg * 100))%")
+            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+            .foregroundStyle(Color.anchorText)
+            .frame(width: 42, height: 28)
+            .background(scoreColor.opacity(0.2), in: RoundedRectangle(cornerRadius: 5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(scoreColor.opacity(0.5), lineWidth: 1)
+            )
+    }
+
+    private var expandedDetails: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Divider().padding(.bottom, 4)
+
+            detailRow("Best streak",        formatDuration(summary.longestFocusStreak))
+            detailRow("Off-task",           formatDuration(summary.offTaskTime))
+            detailRow("Score lo/hi/final",  scoreSummary)
+            if summary.breakCount > 0 {
+                detailRow("Active time",    formatDuration(summary.activeWorkTime))
+                detailRow("Break time",     formatDuration(summary.totalBreakTime), color: .anchorBreakBlue)
+                detailRow("Breaks",         "\(summary.breakCount)")
+            }
+            if let cycles = summary.pomodoroCompletedCycles {
+                detailRow("Pomodoro cycles", "\(cycles)")
+            }
+            detailRow("Interventions", interventionLabel)
+
+            if !summary.topDistractions.isEmpty {
+                Text("TOP DISTRACTIONS")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.anchorTerracotta.opacity(0.6))
+                    .tracking(0.6)
+                    .padding(.top, 4)
+                ForEach(summary.topDistractions.prefix(3), id: \.context) { entry in
+                    detailRow(cleanLabel(entry.context), formatDuration(entry.seconds), color: .anchorRed.opacity(0.8))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("NOTE")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.anchorTerracotta.opacity(0.6))
+                    .tracking(0.6)
+                    .padding(.top, 4)
+                TextEditor(text: $editingNote)
+                    .font(.system(size: 10))
+                    .scrollContentBackground(.hidden)
+                    .background(Color.anchorLinen)
+                    .cornerRadius(4)
+                    .frame(minHeight: 44, maxHeight: 80)
+                    .overlay(alignment: .topLeading) {
+                        if editingNote.isEmpty {
+                            Text("Add a note...")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.anchorTextMuted.opacity(0.5))
+                                .padding(4)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.anchorBorder.opacity(0.5), lineWidth: 1)
+                    )
+                    .tint(Color.anchorTerracotta)
+                    .onTapGesture {}
+
+                if editingNote != summary.note {
+                    HStack {
+                        Spacer()
+                        Button("Save note") {
+                            var updated = summary
+                            updated.note = editingNote
+                            SessionSummaryStore.shared.save(updated)
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.anchorTerracotta)
+                    }
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.anchorRed)
+            }
+            .padding(.top, 6)
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String, color: Color = .anchorText) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.anchorTextMuted)
+                .frame(width: 120, alignment: .leading)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(value)
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(color)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var scoreColor: Color {
+        switch summary.focusScoreAvg {
+        case 0.7...: return .anchorTerracotta
+        case 0.4...: return .anchorAmber
+        default:     return .anchorRed
+        }
+    }
+
+    private var scoreSummary: String {
+        let lo  = String(format: "%.0f%%", summary.focusScoreMin   * 100)
+        let hi  = String(format: "%.0f%%", summary.focusScoreMax   * 100)
+        let fin = String(format: "%.0f%%", summary.focusScoreFinal * 100)
+        return "\(lo) / \(hi) / \(fin)"
+    }
+
+    private var interventionLabel: String {
+        if summary.interventionCount == 0 { return "none" }
+        var label = "\(summary.interventionCount)"
+        if summary.escalationCount > 0 { label += " (\(summary.escalationCount) escalated)" }
+        return label
+    }
+
+    private func relativeDate(_ date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60       { return "just now" }
+        if interval < 3600     { return "\(Int(interval / 60))m ago" }
+        if interval < 86_400   { return "\(Int(interval / 3600))h ago" }
+        if interval < 172_800  { return "yesterday" }
+        if interval < 604_800  { return "\(Int(interval / 86_400))d ago" }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, h:mm a"
+        return f.string(from: date)
+    }
+
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60   { return "\(s)s" }
+        if s < 3600 {
+            let m = s / 60; let r = s % 60
+            return r == 0 ? "\(m)m" : "\(m)m \(r)s"
+        }
+        let h = s / 3600; let m = (s % 3600) / 60
+        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+    }
+
+    private func cleanLabel(_ context: String) -> String {
+        context
+            .replacingOccurrences(of: "domain:", with: "")
+            .replacingOccurrences(of: "app:", with: "")
     }
 }
 
@@ -1518,7 +1805,7 @@ extension RiskLevel {
 // MARK: - Helpers
 
 private func scoreColor(for score: Double) -> Color {
-    if score >= 0.7 { return .anchorSage }
+    if score >= 0.7 { return .anchorGold }
     if score >= 0.4 { return .anchorAmber }
     return .anchorRed
 }

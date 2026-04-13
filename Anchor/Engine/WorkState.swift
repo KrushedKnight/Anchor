@@ -11,8 +11,8 @@ enum WorkState: String {
 
     var stateColor: Color {
         switch self {
-        case .deepFocus:           Color.anchorSage
-        case .productiveSwitching: Color.anchorSage.opacity(0.75)
+        case .deepFocus:           Color.anchorTerracotta
+        case .productiveSwitching: Color.anchorTerracotta.opacity(0.6)
         case .stuckCycling:        Color.anchorAmber
         case .noveltySeeking:      Color.anchorAmber
         case .passiveDrift:        .anchorRed

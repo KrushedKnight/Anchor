@@ -31,6 +31,11 @@ final class SessionSummaryStore {
         try? data.write(to: url, options: .atomic)
     }
 
+    func delete(sessionId: UUID) {
+        let url = directory.appendingPathComponent("\(sessionId.uuidString).json")
+        try? FileManager.default.removeItem(at: url)
+    }
+
     func load() -> [SessionSummary] {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: directory,
